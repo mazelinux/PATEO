@@ -1,31 +1,5 @@
-上海博泰悦臻电子设备制造有限公司
-91310114695793034W
-
-jupiter 是车展仪表盘;裸android代码
-branch jupiter_android
-jenkins http://10.10.96.212:8080/view/1.Projects/view/PRJ_X37_6.0/job/PRJ_Android_X37/
-新版对应branch jupiter_18show_dashboard 
-
-
-18show  是车展主机端[12.3]
-branch jupiter_x37_18show
-jenkins http://10.10.96.212:8080/view/1.Projects/view/PRJ_18Show_6.0/job/PRJ_18Show_6.0/
-新版对应branch jupiter_18show_fzk
-
-f0307h  是x37代码[10.5]
-branch jupiter_f0307h
-jenkins http://10.10.96.212:8080/view/1.Projects/view/PRJ_X37_6.0/job/PRJ_F0307H_6.0/
-
-jupiter_18show_bzk 是后排两块屏的android[15.6]
-branch jupiter_18show_bzk
-
 ANDROID_VERSION=6.0.1
 KERNEL_VERSION=4.1.15
-
-==============================
-5.jenkins上是否只有徳兵可以打包
-我们可以申请权限。
-
 
 *****************************
 将tp以及lcd的驱动代码找出来
@@ -46,93 +20,6 @@ board_recovery_setup :setup_recvoery_env --->bootable/bootloader/uboot_imx/board
 check_recovery_mode --->board/freescale/common/recovery.c
 fastboot_setup --->bootable/bootloader/uboot-imx/drivers/usb/gadget/f_fastboot.c
 
-编译流程的理解，lunch参数的总体传递
-
-
-南京
-需要问的问题：什么情况下可能boota mmc1 recovery
-              什么时候正常进入boota mmc1 boot
-              drivers/usb/gadget/f_fastboot.c
-              commit id :b2e1aa6c667f69ec28ce57bd11afd49460cc4383
-              除了进入recovery界面以外，还有什么办法清除data分区。
-              recovery界面的那些命令：全包升级，清data分区等等是在何处定义的
-
-
-
-=========================================================
-adb 不管用，我将bootloader_nor       刷u-boot-imx6qp.imx
-                boot bootb           刷boot-adb.img
-                recovery recoveryb   刷revocery-imx6qp.img
-                system systemb       刷system.img
-                均无效.
-                dmesg|grep adb 的情况是adbd一直在被执行
-            重新全包升级则正常
-为什么?
-=========================================================
----recovery.cpp
-
-
-=========================================================
-15fb9660da243bf885502bb11fe62391945ad7ea
-add imx6qp config
-/* set SW1C staby volatage 1.075V*/
-为什么做了两次
-=========================================================
-
-=========================================================
-boot_type == 0; boota mmc1 xxxx
-boot_type == 1; boota mmc1 xxxxb
-
-bootcomplete ----->recovery 183
-factory 升级两个system
-
----boot ok ? 
----bootb ok ?
----recovery ok ?
----recoveryb ok ?
-
----mcu 
----minirecovery 30
----reboot recovery
-=========================================================
-autoconfig.mk
-./bootable/bootloader/uboot-imx/include/autoconf.mk:132:CONFIG_ANDROID_RECOVERY
-=========================================================
-=========================================================
-
-
-
-=========================================================
-关于编译版本
-./script/build_android.sh f0307h all eng
-./script/build_android.sh f0307h allpackage eng
-=========================================================
-
-oooooooooooo
-oooooooooooo
-oooooooooooo
-script/build_android f0307h allpackage eng
-1.log乱码
-
-2.生成的ota包名字不对。有个user后缀 --->version.config
-build/core/Makefile --->TARGET_SYSTEM_VERSION --->Boardconfig.mk
-
-
-
-0000000000
-0000000000
-0000000000
-看看 build_allpackage的log
-recovry目录下如何清除的data分区 *********
-验证android启动流程是否是boot，bootb，recovery，recoveryb
-看看make all以及make allpackage的区别 build/core/Makefile
-ooo
-
-6qp.dts gpio 属性 
-        interrupts 属性
-
-    从原理图到最终解析
-ooo
 ========================================================
 source insight ===>ctrl+o 右边搜索
                ===>alt+l  左边搜索
@@ -148,19 +35,8 @@ commit :f759a67c290008b7c1520c149638ac514dd94999
 ========================================================
 video
 
-
-
 fb_videomode ---------> include/linux/fb.h
              ---------> mxc_lcdif.c
-
-0000000000000000000000000000
-写俩在中断里面的log.查看上报点的次数
-直接getevent |grep "x"
-
-
-
-
-
 
 http://blog.csdn.net/myarrow/article/details/7091061
 http://blog.sina.com.cn/s/blog_6695f9eb0101gmwo.html
@@ -174,6 +50,3 @@ inputreader ---->touchinputmapper::sync
 inputreader ---->MultiTouchInputMapper::synctouch *
 TouchInputMapper::dispatchTouches *** 判断事件类型的地方
 
-
-
-触摸屏不论是一跟手指还是多跟手指，上报的都是multi事件。这方面其实我们可以在驱动判断是一个还是多个上报不同的数据[好像没多大必要]
