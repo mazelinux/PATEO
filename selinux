@@ -1,0 +1,231 @@
+从 Android 4.3 起，SELinux 开始为传统的自主访问控制 (DAC) 环境提供强制访问控制 (MAC) 保护功能。例如，软件通常情况下必须以 Root 用户帐号的身份运行，才能向原始块设备写入数据。在基于 DAC 的传统 Linux 环境中，如果 Root 用户遭到入侵，攻击者便可以利用该用户身份向每个原始块设备写入数据。不过，可以使用 SELinux 为这些设备添加标签，以便被分配了 Root 权限的进程只能向相关政策中指定的设备写入数据。这样一来，该进程便无法重写特定原始块设备之外的数据和系统设置。
+
+强制执行级别
+
+Android分为宽容模式(仅记录但不强制执行 SELinux 安全政策 )和强制模式(强制执行并记录安全政策。如果失败，则显示为 EPERM 错误。 )；在选择强制执行级别时只能二择其一，您的选择将决定您的政策是采取操作，还是仅允许您收集潜在的失败事件。宽容模式在实现过程中尤其有用。
+
+标签、规则和域
+
+SELinux依靠标签来匹配任何访问操作和政策。也就是说在Anroid系统中无论是套接字、文件还是进程都会在启动过程中被打上标签（seclabel），标签决定了操作权限，例如A进程是否有权限读写访问B文件或者C目录等在SELinux中，标签采用“user:role:type:mls_level ”形式（如u:r:init:s0），其中type是关键中的关键。
+
+如果我们需要某些进程对某些目标具有操作权限，我们需要对这些操作配置SELinux策略，即allow domains types:classes permissions的形式（allow init ipa_dev:chr_file open 表示init进程可以对chr_file类型的ipa_dev具有open权限）
+Domain - 一个进程或一组进程的标签。也称为域类型，因为它只是指进程的类型。
+Type - 一个对象（例如，文件、套接字）或一组对象的标签。
+Class - 要访问的对象（例如，文件、套接字）的类型。
+Permission - 要执行的操作（例如，读取、写入）。
+
+注意：为了集中管理自定义的策略，我们可以在te_macros文件中定义一些宏；
+
+除了在规则中逐个域或类型之外，我们可以通过属性引用一组域或类型。简单来说，属性是一组域或者类型的名称。每个域或类型都可以与任意数量的属相相关联。可以说属性大大优化和精简了sepolicy。即当编写的规则指定了某个属性名称时，domain属性与所有进程域相关联，file_type属性与所有文件类型相关联；
+
+注意：在任何情况下，都不应该直接允许域（domain）访问以下通用标签；而应为一个或多个对象创建一个更具体的类型；
+socket_devicedeviceblock_devicedefault_servicesystem_data_filetmpfs
+
+SELinux实现
+
+platform/system/sepolicy/目录下是Android系统默认的策略文件，这些文件在编译后会包含 SELinux 内核安全政策，并涵盖上游 Android 操作系统。但我们在配置添加SELinux策略文件时并不是在该目录下，而是在/device/manufacturer/device-name/sepolicy 目录中，如qcom平台的为/device/qcom/common（具体项目）/sepolicy下；
+
+要实现SELinux则需要创建或修改以下文件：
+
+新的 SELinux 政策源代码 (*.te) 文件 - 位于 /device/manufacturer/device-name/sepolicy 目录中。这些文件用于定义域及其标签。在编译到单个 SELinux 内核政策文件时，新的政策文件会与现有的政策文件组合在一起。重要（提示：请勿更改 Android 开放源代码项目提供的 app.te 文件，否则可能会破坏所有第三方应用。）
+更新后的 BoardConfig.mk makefile - 位于包含 sepolicy 子目录的目录中。如果初始实现中没有 sepolicy 子目录，那么在该子目录创建之后，必须更新 BoardConfig.mk makefile，以引用该子目录。或者在当前te文件所在目录的Android.mk文件中引用该目录或文件；具体如：BOARD_SEPOLICY_DIRS += device/qcom/common（具体项目）/sepolicy
+file_contexts - 位于 sepolicy 子目录中。该文件用于为文件分配标签，并且可供多种用户空间组件使用。在创建新政策时，请创建或更新该文件，以便为文件分配新标签。要应用新的 file_contexts，您必须重新构建文件系统映像，或对要重新添加标签的文件运行 restorecon。在升级时，对 file_contexts 所做的更改会在升级过程中自动应用于系统和用户数据分区。此外，还可以通过以下方式使这些更改在升级过程中自动应用于其他分区：在以允许读写的方式装载相应分区后，将 restorecon_recursive 调用添加到 init.board.rc 文件中。genfs_contexts - 位于 sepolicy 子目录中。该文件用于为不支持扩展属性的文件系统（例如，proc 或 vfat）分配标签。此配置会作为内核政策的一部分进行加载，但更改可能对核心内 inode 无效。要全面应用更改，需要重新启动设备，或卸载后重新装载文件系统。此外，通过使用 context=mount 选项，还可以为装载的特定系统文件（例如 vfat）分配特定标签。property_contexts - 位于 sepolicy 子目录中。该文件用于为 Android 系统属性分配标签，以便控制哪些进程可以设置这些属性。在启动期间，init 进程会读取此配置。service_contexts - 位于 sepolicy 子目录中。该文件用于为 Android Binder 服务分配标签，以便控制哪些进行可以为相应服务添加（注册）和查找（查询）Binder 引用。在启动期间，servicemanager 进程会读取此配置。
+seapp_contexts - 位于 sepolicy 子目录中。该文件用于为应用进程和 /data/data 目录分配标签。在每次应用启动时，zygote 进程都会读取此配置；在启动期间，installd 会读取此配置。
+mac_permissions.xml - 位于 sepolicy 子目录中。该文件用于根据应用签名和应用软件包名称（后者可选）为应用分配 seinfo 标记。然后，分配的 seinfo 标记可在 seapp_contexts 文件中用作密钥，以便为带有该 seinfo 标记的所有应用分配特定标签。在启动期间，system_server 会读取此配置。
+
+接下来，只需在 sepolicy 子目录和各个政策文件创建之后，更新 BoardConfig.mk Makefile（位于包含 sepolicy 子目录的目录中）以引用该子目录和这些政策文件即可，如下所示。BOARD_SEPOLICY 变量及其含义记录在 system/sepolicy/README 文件中。
+
+详细步骤：
+
+下面详细介绍了 Android 建议您如何采用并自定义 SELinux 来保护设备：
+在内核中启用 SELinux： CONFIG_SECURITY_SELINUX=y更改 kernel_cmdline 参数，以便：
+BOARD_KERNEL_CMDLINE := androidboot.selinux=permissive
+
+这仅适用于初始制定设备政策的情况。在拥有初始引导程序政策后，请移除此参数，以便将设备恢复强制模式，否则设备将无法通过 CTS 验证。以宽容模式启动系统，看看在启动时会遇到哪些拒绝事件：
+在 Ubuntu 14.04 或更高版本中：
+adb shell su -c dmesg | grep denied | audit2allow -p out/target/product/BOARD/root/sepolicy
+
+在 Ubuntu 12.04 中：
+adb shell su -c dmesg | grep denied | audit2allow评估输出。如需查看相关说明和工具标识设备以及需要添加标签的其他新文件。为您的对象使用现有标签或新标签。查看 *_contexts 文件，了解之前是如何为内容添加标签的，然后根据对标签含义的了解分配一个新标签。这最好是一个能够融入到政策中的现有标签，但有时需要使用新标签，并且还需要关于访问该标签的规则。标识应该拥有自己的安全域的域/进程。可能需要为其中每个域/进程从头开始编写政策。例如，从 init 衍生的所有服务都应该有自己的安全域。可以通过以下命令查看保持运行的服务（不过所有服务都需要如此处理）：
+adb shell su -c ps -Z | grep init
+adb shell su -c dmesg | grep 'avc: '查看 init..rc，以找出所有没有类型的服务。应提早为此类服务提供域，以避免向 init 添加规则或将 init 访问权限与其自身政策中的访问权限混淆。将 BOARD_CONFIG.mk 设为使用 BOARD_SEPOLICY_* 变量。如需关于如何进行此项设置的详细信息，请参阅 system/sepolicy 中的 README。检查 init..rc 和 fstab. 文件，确保每一次使用“mount”都对应一个添加了适当标签的文件系统，或者指定了 context= mount 选项。查看每个拒绝事件，并创建 SELinux 政策来妥善处理每个拒绝事件。
+
+用例
+
+下面列举了一些在开发软件以及制定关联的 SELinux 政策时需要注意的具体漏洞：
+
+符号链接 - 由于符号链接以文件形式显示，因此通常也是作为文件被读取。这可能会导致漏洞。例如，某些特权组件（例如 init）会更改某些文件的权限，有时会使之极度开放。
+
+这样一来，攻击者便可以将这些文件替换成指向其控制的代码的符号链接，从而重写任意文件。但如果您知道自己的应用绝不会遍历符号链接，则可以通过 SELinux 来禁止您的应用遍历符号链接。
+
+系统文件 - 以应该只有系统服务器可以修改的一系列系统文件为例。由于 netd、init 和 vold 是以 Root 身份运行的，因此它们也可以访问这些系统文件。这样一来，如果 netd 遭到入侵，它将可以入侵这些文件，并可能会入侵系统服务器本身。
+
+借助 SELinux，您可以将这些文件标识为系统服务器数据文件。这样一来，系统服务器就是唯一对这些文件具有读写权限的域。即使 netd 遭到入侵，它也无法将域切换到系统服务器域并访问这些系统文件，就算它是以 Root 身份运行的也是如此。
+
+应用数据 - 另一个示例是必须以 Root 身份运行但不应获得应用数据访问权限的一系列函数。这非常有用，因为可以做出广泛的声明，例如禁止与应用数据无关的特定域访问互联网。
+
+setattr - 对于 chmod、chown 等命令，您可以标识关联域可以在哪些文件中进行 setattr 操作。这样一来，便可以禁止对这些文件之外的任何文件进行此类更改，即使以 Root 身份进行也不例外。因此，应用可以对带 app_data_files 标签的文件运行 chmod 和 chown 命令，但不能对带 shell_data_files 或 system_data_files 标签的文件运行这些命令。
+
+自定义SELinux
+
+制造商不得移除现有的安全设置，否则可能会破坏 Android SELinux 实现及其管控的应用。这包括可能需要进行改进以符合政策并正常运行的第三方应用。应用必须无需进行任何修改即可继续在启用了 SELinux 的设备上正常运行。
+
+当开始着手自定义 SELinux 时，制造商应记得做以下事情：
+为所有新的守护进程编写 SELinux 政策尽可能使用预定义的域为作为 init 服务衍生的所有进程分配域在编写政策之前先熟悉相关的宏向 AOSP 提交对核心政策进行的更改
+
+不要做以下事情：
+创建不兼容的政策允许对最终用户政策进行自定义允许对 MDM 政策进行自定义恐吓违反政策的用户添加后门程序
+
+!首先请注意，SELinux 基于M4计算机语言，因此支持多种有助于节省时间的宏。
+
+案例解析：
+
+以下是一个完整的 DHCP 政策示例，我们将在下文中对其进行分析：
+
+type dhcp, domain;
+
+permissive dhcp;
+
+type dhcp_exec, exec_type, file_type;
+
+type dhcp_data_file, file_type, data_file_type;
+
+init_daemon_domain(dhcp)
+
+net_domain(dhcp)
+
+allow dhcp self:capability { setgid setuid net_admin net_raw net_bind_service
+
+};
+
+allow dhcp self:packet_socket create_socket_perms;
+
+allow dhcp self:netlink_route_socket { create_socket_perms nlmsg_write };
+
+allow dhcp shell_exec:file rx_file_perms;
+
+allow dhcp system_file:file rx_file_perms;
+
+# For /proc/sys/net/ipv4/conf/*/promote_secondaries
+
+allow dhcp proc_net:file write;
+
+allow dhcp system_prop:property_service set ;
+
+unix_socket_connect(dhcp, property, init)
+
+type_transition dhcp system_data_file:{ dir file } dhcp_data_file;
+
+allow dhcp dhcp_data_file:dir create_dir_perms;
+
+allow dhcp dhcp_data_file:file create_file_perms;
+
+allow dhcp netd:fd use;
+
+allow dhcp netd:fifo_file rw_file_perms;
+
+allow dhcp netd:{ dgram_socket_class_set unix_stream_socket } { read write };
+
+allow dhcp netd:{ netlink_kobject_uevent_socket netlink_route_socket netlink_nflog_socket } { read write };
+
+下面我们来分析一下该示例：
+
+在第一行（即类型声明）中，该政策声明 DHCP 守护进程将沿用基本的安全政策 (domain)。
+
+在第二行中，DHCP 被声明为宽容域。
+
+在 init_daemon_domain(dhcp) 这一行中，该政策声明 DHCP 是从 init 衍生而来的，并且可以与其进行通信。
+
+在 net_domain(dhcp) 这一行中，该政策允许 DHCP 使用 net 域中的常用网络功能，例如读取和写入 TCP 数据包、通过套接字进行通信，以及执行 DNS 请求。
+
+在 allow dhcp proc_net:file write; 这一行中，该政策声明 DHCP 可以向 /proc 中的特定文件写入数据。这一行显示了 SELinux 的详细文件标签。它使用 proc_net 标签来限定 DHCP 仅对 /proc/sys/net 中的文件具有写入权限。
+
+该示例的最后一部分以 allow dhcp netd:fd use; 开头，描述了允许应用之间如何进行交互。该政策声明 DHCP 和 netd 之间可通过文件描述符、FIFO 文件、数据报套接字以及 UNIX 信息流套接字进行通信。DHCP 只能从数据报套接字和 UNIX 信息流套接字中读取数据以及向它们写入数据，但不能创建或打开此类套接字。
+
+neverallow规则
+
+SELinux neverallow 规则用于禁止在任何情况下都不应该发生的行为。 通过兼容性测试，现在各种合作伙伴设备上都会强制执行 SELinux neverallow 规则。
+
+以下准则旨在协助制造商在自定义过程中避免与 neverallow 规则相关的错误。此处使用的规则编号与 Android 5.1 中使用的编号一致，并且会因版本而异。
+
+规则 48：neverallow { domain -debuggerd -vold -dumpstate -system_server } self:capability sys_ptrace;
+
+sys_ptrace 功能用于授予对任何进程执行 ptrace 命令的权限。拥有该权限后，可以对其他进程进行广泛的控制。应该只有该规则中列出的指定系统组件享有该权限。如果需要该功能，则通常表明存在的某些内容不适用于面向用户的版本或存在不需要的功能。请移除不必要的组件。
+
+规则 76：neverallow { domain -appdomain -dumpstate -shell -system_server -zygote } { file_type -system_file -exec_type }:file execute;
+
+该规则旨在防止执行系统中的任意代码。具体来说就是，该规则声明仅执行 /system 中的代码，以便通过验证启动等机制实现安全保证。 通常情况下，当遇到与这个 neverallow 规则相关的问题时，最好的解决办法是将违规代码移到 /system分区。
+
+验证SELinux
+
+首先，应用新政策后，可以通过执行 getenforce 命令来确认 SELinux 在设备上的运行模式是否正确。该命令将会显示全局 SELinux 模式：强制或宽容。请注意，该命令只会显示全局 SELinux 模式。要确定每个域的 SELinux 模式，您必须查看相应的文件，或运行带有适当 (-p) 标记的最新版 sepolicy-analyze（位于 /platform/system/sepolicy/tools/ 中）。
+
+读取拒绝事件
+
+接下来是检查是否存在错误。错误会以事件日志的形式路由到 dmesg 和 logcat，并可在设备上从本地查看。制造商应先检查这些设备上路由到 dmesg 的 SELinux 输出并优化设置，然后再在宽容模式下公开发布，最后切换到强制模式。SELinux 日志消息中包含“avc:”，因此可以通过 grep 轻松找到。可以通过运行 cat /proc/kmsg 来获取当前的拒绝事件日志，也可以通过运行 cat /proc/last_kmsg 来获取上次启动时的拒绝事件日志。
+
+借助这种输出，制造商可以轻松发现系统用户或组件违反 SELinux 政策的行为。然后，制造商便可以通过对相应软件和/或 SELinux 政策进行更改来防范这种恶意行为。
+
+具体来说就是，这些日志消息会指明在强制模式下哪些进行会失败以及失败原因。示例如下：
+
+avc: denied { connectto } for pid=2671 comm="ping" path="/dev/socket/dnsproxyd"
+
+scontext=u:r:shell:s0 tcontext=u:r:netd:s0 tclass=unix_stream_socket
+
+接下来是检查是否存在错误。错误会以事件日志的形式路由到 dmesg 和 logcat，并可在设备上从本地查看。制造商应先检查这些设备上路由到 dmesg 的 SELinux 输出并优化设置，然后再在宽容模式下公开发布，最后切换到强制模式。SELinux 日志消息中包含“avc:”，因此可以通过 grep 轻松找到。可以通过运行 cat /proc/kmsg 来获取当前的拒绝事件日志，也可以通过运行 cat /proc/last_kmsg 来获取上次启动时的拒绝事件日志。
+
+借助这种输出，制造商可以轻松发现系统用户或组件违反 SELinux 政策的行为。然后，制造商便可以通过对相应软件和/或 SELinux 政策进行更改来防范这种恶意行为。
+
+该输出的解读如下：
+上方的 { connectto } 表示正在执行的操作。通过它和末尾的 tclass (unix_stream_socket)，您可以大致了解正在对什么对象执行什么操作，在该示例中是某个操作方正在试图连接到 UNIX 信息流套接字。scontext (u:r:shell:s0) 旨在告诉您发起相应操作的环境，在该示例中是某个作为 shell 运行的操作方。tcontext (u:r:netd:s0) 旨在告诉您操作目标的环境，在该示例中是某个归 netd 所有的 unix_stream_socket。顶部的 comm="ping" 旨在为您提供更多提示，让您了解拒绝事件发生时正在运行的操作。在该示例中，这是一个非常实用的提示。
+
+下面是另一个示例：
+
+adb shell su root dmesg | grep 'avc: '
+
+输出：
+
+<5> type=1400 audit: avc: denied { read write } for pid=177
+
+comm="rmt_storage" name="mem" dev="tmpfs" ino=6004 scontext=u:r:rmt:s0
+
+tcontext=u:object_r:kmem_device:s0 tclass=chr_file
+
+以下是此拒绝事件的关键元素：
+操作 - 试图进行的操作使用括号突出显示：read write 或 setenforce。操作方 - scontext（来源环境）条目表示操作方；在该示例中为 rmt_storage 守护进程。对象 - tcontext（目标环境）条目表示正在对哪个对象执行操作；在该示例中为 kmem。结果 - tclass（目标类别）条目表示当前操作对象的类型；在该示例中为 chr_file（字符设备）。
+
+切换到宽容模式
+
+adb shell getenforce 通过该命令查看当前模式
+
+adb shell setenforce 0 通过该命令切换到宽容模式
+为新服务添加标签并解决拒绝事件
+
+通过 init 启动的服务需要在各自的 SELinux 域中运行。以下示例会将服务“foo”放入它自己的 SELinux 域中并为其授予权限。
+
+该服务是在设备的 init..rc 文件中启动的，如下所示：
+
+service foo /system/bin/foo
+
+class core
+创建一个新域“foo”
+创建包含以下内容的文件 device///sepolicy/foo.te：
+# foo service
+type foo, domain;
+type foo_exec, exec_type, file_type;
+
+init_daemon_domain(foo)
+这是 foo SELinux 域的初始模板，您可以根据该可执行文件执行的具体操作为该模板添加规则。为 /system/bin/foo 添加标签
+将以下内容添加到 device///sepolicy/ file_contexts：
+/system/bin/foo u:object_r:foo_exec:s0
+这可确保为该可执行文件添加适当的标签，以便 SELinux 在适当的域中运行相应服务。编译并刷写启动映像和系统映像。优化相应域的 SELinux 规则。
+根据拒绝事件确定所需的权限。audit2allow 工具提供了一些实用的指南，但该工具仅适用于提供编写政策时所需的信息。切勿只是复制输出内容。 过度使用否定案例
+
+以下示例规则类似于锁着前门，但开着窗户：
+
+allow { domain -untrusted_app } scary_debug_device:chr_file rw_file_perms
+
+该规则的意图很明确：除了第三方应用之外，其他所有应用都可以访问调试设备。
+
+该规则存在几个方面的缺陷。排除 untrusted_app 能起到的效果微不足道，因为所有应用都可以选择在 isolated_app 域中运行服务。同样，如果第三方应用的新域被添加到了 AOSP，它们也可以访问 scary_debug_device。该规则过于宽容。对于大多数域来说，能够访问该调试工具并不能使它们获益。该规则应编写为仅允许需要访问该调试工具的域。
+
