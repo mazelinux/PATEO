@@ -795,7 +795,8 @@ uboot/drivers/usb/gadget/f_fastboot.c
             {"n25q1024a",      INFO(0x20bb21, 0x0,  64 * 1024,  2048, RD_FULL | WR_QPP | E_FSR | SECT_4K) },
             {"mt25qu02g",      INFO(0x20bb22, 0x0,  64 * 1024,  4096, RD_FULL | WR_QPP | E_FSR | SECT_4K) },
             {"mt25ql02g",      INFO(0x20ba22, 0x0,  64 * 1024,  4096, RD_FULL | WR_QPP | E_FSR | SECT_4K) },
-    +       {"mt35xu256aba",   INFO(0x2c5b19, 0x0, 128 * 1024,   256, E_FSR   | SECT_4K) },
+    //+       {"mt35xu256aba",   INFO(0x2c5b19, 0x0, 128 * 1024,   256, E_FSR   | SECT_4K) },
+    +       {"mt35xu256aba",   INFO(0x2c5b19, 0x0, 128 * 1024,   256, E_FSR) },
             {"mt35xu512aba",   INFO(0x2c5b1a, 0x0, 128 * 1024,   512, E_FSR) },
         #endif
         #ifdef CONFIG_SPI_FLASH_SST            /* SST */
@@ -807,6 +808,7 @@ uboot/drivers/usb/gadget/f_fastboot.c
          CONFIG_DM_SPI_FLASH=y
          CONFIG_SPI_FLASH=y
         -CONFIG_SPI_FLASH_BAR=y
+        +CONFIG_QSPI_BOOT=y
         +CONFIG_SPI_FLASH_4BYTES_ADDR=y
         +CONFIG_SPI_FLASH_USE_4K_SECTORS=y
          CONFIG_SPI_FLASH_STMICRO=y
@@ -825,7 +827,6 @@ uboot/drivers/usb/gadget/f_fastboot.c
                                                 
 
 至此，fastboot支持烧写bootloader_nor分区，并且能够正常的烧写启动。
-    但是启动以后有其他问题：nor_flash引导启动kernel以后,kernel无法正常probe nor_flash设备
     
 
 ##########################################################################################################################
