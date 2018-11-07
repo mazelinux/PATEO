@@ -124,3 +124,26 @@ LCD                                            ====================> 0001
 
 
 
+##########################################################################################################################
+lcd : 
+    1 dts
+    需要资源：
+        lcd数据手册 '/home/maze/work/PATEO/qcom/8937/46-1%E3%80%81TM080JDHP95+Product+Spec+V1.1_.pdf' 
+        lcd初始化代码
+        高通lcd timing工具'/home/maze/work/PATEO/qcom/8937/80-NH713-1_R_DSI_Timing_Parameters_User_Interactive_Spreadsheet.xlsm' 
+        高通lcd初始化代码转高通格式工具 '/home/maze/work/DLS-Simcom-8.1/device/qcom/common/display/tools/parser.pl' 
+
+
+    需要工作
+    dts->msm8937-mtp.dtsi
+    dts->msm8937-mdss-panels.dtsi
+    驱动应该是完善的。不需要做任何改动
+    参考bringup文档'/home/maze/work/PATEO/qcom/8937/SIM8950 Series Display Driver Development Guide_V1.00.docx' 
+
+    2加串解串
+    需要资源:
+        max9283/max9278 数据手册
+    需要工作:
+     dts->arch/arm/boot/dts/qcom/msm8937.dtsi
+     driver->misc/max92xx/
+     menuconfig->arch/arm/configs/msm8937_defconfig [userdebug]
