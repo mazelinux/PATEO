@@ -393,6 +393,22 @@ uboot_printenv/cmdline传递                      ====================> 016
     total_lane_num ：表示的是data lane的对数。
 
 
+    Min DSI CLK = (Total number of Horizontal pixels presented on DSI interface*DSI bits per pixel)/(Horizontal Line Time*2*Number of DSI lanes)
+
+    DSI bits per pixel = 24bpp if RGB888 or Loosely packed RGB666 is selected, 18bpp if RGB666 is selected
+
+    Total number of Horizontal pixels presented on DSI Interface = HBP(Horizontal Back Porch) + HFP(Horizontal Front Porch) + HPW(Horizontal Pulse Width) + Active number of Horizontal pixels for panel.
+
+    HBP and HFP and HPW can vary on the MIPI interface, it does not have to match panel datasheet for burst mode. 
+
+    Horizontal Line Time = Total number of LVDS Horizontal Pixels/LVDS CLK Frequency
+
+    Where LVDS CLK Frequency = Pixel CLK for single channel LVDS panel.
+
+
+    =======================================================================================
+
+
 
     gps模块
 

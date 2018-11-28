@@ -22,10 +22,30 @@ LCD                                            ====================> 0001
 0000                                                    LCD
 ##########################################################################################################################
 "key":
-
+        Acronym             Definition
+        CLK     : Click
+        CMD     : Command
+        DCS     : Digital Cellular System
+        D-PHY   : Display Serial Interface Physical Layer
+        DSI     : Display Serial Interface
+        DTS     : Digital Test Sequence
+        GCDB    : Global Component Database
+        GPIO    : General Purpose Input/Output
+        HS      : High Speed
+        HW      : Hardware
+        IC      : Integrated Circuit
+        LCD     : Liquid Crystal Display
+        LK      : Little Kernel
         MDSS    : 高通平台lcd multimedia Display sub system
         DSI     : Display Serial Interface
         MDP     : Mobile display processor
+        MIPI    : Mobile Industry Processor Interface
+        OEM     : Original Equipment Manufacturer
+        PHY     : Physical Layer
+        PMIC    : Power Management Integrated Circuit
+        PWM     : Pulse Width Modulation
+        TE      : Terminal Emulator
+        XML     : eXtensible Markup Language
 
 "MDP":
 
@@ -33,7 +53,8 @@ LCD                                            ====================> 0001
         LM      : Layer Mixer（LM）--混合外表面
         DSPP    : Destination Surface Processor（DSPP）---根据面板特性进行转换，校正和调整
         WB      : Write-Back/Rotation（WB）---回写到内存，如果需要还可以旋转
-        Display interface--时序生成器，和外部显示设备对接    Soure Surface Processor（ViG， RGB，DMA-SSPA）---格式转换和质量提升（video， graphics 等）
+        Display interface--时序生成器，和外部显示设备对接   
+        Soure Surface Processor（ViG， RGB，DMA-SSPA）---格式转换和质量提升（video， graphics 等）
 
 "相关code路径":
         kernel/driver/video/msm/mdss/
@@ -130,11 +151,16 @@ lcd :bringup sim8930l
 
     1.dts
     需要资源：
-        lcd数据手册 '/home/maze/work/PATEO/qcom/8937/46-1%E3%80%81TM080JDHP95+Product+Spec+V1.1_.pdf' 
+        lcd数据手册                     '/home/maze/work/PATEO/qcom/8937/46-1%E3%80%81TM080JDHP95+Product+Spec+V1.1_.pdf' 
+
         lcd初始化代码
-        高通lcd timing工具'/home/maze/work/PATEO/qcom/8937/80-NH713-1_R_DSI_Timing_Parameters_User_Interactive_Spreadsheet.xlsm' 
+
+        高通lcd timing工具              '/home/maze/work/PATEO/qcom/8937/80-NH713-1_R_DSI_Timing_Parameters_User_Interactive_Spreadsheet.xlsm' 
         ctrl+j --> ctrl+k
-        高通lcd初始化代码转高通格式工具 '/home/maze/work/DLS-Simcom-8.1/device/qcom/common/display/tools/parser.pl' 
+
+        高通lcd devicetree 生成工具     '/home/maze/work/DLS-Simcom-8.1/device/qcom/common/display/tools/parser.pl' 
+        device tree 参数解析文档        '/home/maze/work/DLS-Simcom-8.1/kernel/Documentations/devicetree/bindings/fb/mdss-dsi-panel.txt'
+        命令:perl parser.pl <sourec xml file OEM edit> panel                                        ---->生成dsi-panel<vendor>-xxx-xxx.dtsi 和 panel_<vendor>_xxx_xxx.h
 
 
     需要工作
@@ -167,6 +193,9 @@ lcd :bringup sim8930l
     dts->msm8937-mdss-panels.dtsi
     驱动应该是完善的。不需要做任何改动
     参考bringup文档'/home/maze/work/PATEO/qcom/8937/SIM8950 Series Display Driver Development Guide_V1.00.docx' 
+                   '/home/maze/work/PATEO/qcom/8937/lm80-p0436-4_dsi_display_porting_guide.pdf' 
+
+
 
     2.加串解串
     需要资源:
@@ -175,3 +204,12 @@ lcd :bringup sim8930l
      dts->arch/arm/boot/dts/qcom/msm8937.dtsi
      driver->misc/max92xx/
      menuconfig->arch/arm/configs/msm8937_defconfig [userdebug]
+
+
+
+
+
+# Add busybox:
+        PRODUCT_COPY_FILES += \
+            external/devlib/devlib/bin/armeabi/busybox:root/sbin/busybox
+
