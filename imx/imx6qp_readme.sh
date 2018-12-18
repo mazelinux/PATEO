@@ -360,10 +360,11 @@ uboot_printenv/cmdline传递                      ====================> 016
 
     kernel/drivers/video/fbdev/mxc/mxc_lcdif.c
     LCD驱动程序中的pixclock的计算方法:
-        dotclock = (x向分辨率+左空边+右空边+HSYNC长度)* (y向分辨率+上空边+下空边+YSYNC长度)*整屏的刷新率[一秒钟多少张图片]
-        DOTclock = fframe × (X + HBP + HFP+HSPW) × (Y + VBP + VFP+VSPW)  (单位：MHz)
-        PIXclock = 1012/DOTCLK  = 1012/（fframe × (X + HBP + HFP+HSPW) × (Y + VBP + VFP+VSPW)） (单位：皮秒)
-        pixclock = 1/dotclock  其中dotclock是视频硬件在显示器上绘制像素的速率
+        pixclock/pixelclock/dotclock = (x向分辨率+左空边+右空边+HSYNC长度)* (y向分辨率+上空边+下空边+YSYNC长度)*整屏的刷新率[一秒钟多少张图片]
+        pixclock/pixelclock/dotclock = fframe × (X + HBP + HFP+HSPW) × (Y + VBP + VFP+VSPW)  (单位：MHz)
+        pixclock/pixelclock/dotclock = 10的12次方/dotclock  = 10的12次方/（fframe × (X + HBP + HFP+HSPW) × (Y + VBP + VFP+VSPW)） (单位：皮秒)
+        pixclock/pixelclock/dotclock = 10的12次方/dotclock  其中dotclock是视频硬件在显示器上绘制像素的速率
+        [[[单位不同的时候注意单位.换算起来不一样]]]
 
     "mipi"
 
@@ -373,7 +374,7 @@ uboot_printenv/cmdline传递                      ====================> 016
      Bitclk = Total pixel x bpp (byte) x 8/lane number
      Byteclk = bitclk/8
      Dsiclk = Byteclk x lane number
-     Dsipclk = dsiclk/bpp (byte)
+     Dsipclk(Dsi pixel clock) = dsiclk/bpp (byte)
 
     1、DSI vdo mode下的数据速率data_rate的大致计算公式为：
     Data rate= (Height+VSA+VBP+VFP)*(Width+HSA+HBP+HFP)* total_bit_per_pixel*frame_per_second/total_lane_num
