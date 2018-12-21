@@ -406,6 +406,16 @@ uboot_printenv/cmdline传递                      ====================> 016
 
     Where LVDS CLK Frequency = Pixel CLK for single channel LVDS panel.
 
+    "关于转换芯片需要注意的事项"
+    如:dsi83,dsi84
+
+    83本身来说是一路四数据lane的mipi转一路lvds,
+    lvds clock = [htotal]*[vtotal]*60
+    mipi clock = data rate
+
+    84本身来说是一路四数据lane的mipi转两路lvds,相对的.htotal要除以
+    mipi 这边如果填的是1920 + 10 +10 +10 
+    则对于转换芯片来说 lvds是960+5+5+5
 
     =======================================================================================
 
