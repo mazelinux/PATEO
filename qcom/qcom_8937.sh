@@ -21,6 +21,243 @@ LCD                                            ====================> 0001
 ##########################################################################################################################
 0000                                                    LCD
 ##########################################################################################################################
+#############################################################
+lk
+#############################################################
+lk/app/aboot/aboot.c
+                                        target_display_init()接着调用gcdb_display_init()
+lk/target/msm8952/target_display.c
+                                        gcdb_display_init()判断lcd类型.不同类型的初始化
+
+                                        if (pan_type == PANEL_TYPE_DSI) {
+                                            if (update_dsi_display_config())
+                                                goto error_gcdb_display_init;
+                                                target_dsi_phy_config(&dsi_video_mode_phy_db);
+                                                mdss_dsi_check_swap_status();
+                                                mdss_dsi_set_pll_src();
+                                                if (dsi_panel_init(&(panel.panel_info), &panelstruct)) {    //dsi panel init逻辑
+                                                        dprintf(CRITICAL, "DSI panel init failed!\n");
+                                                        ret = ERROR;
+                                                        goto error_gcdb_display_init;
+                                                }
+                                                panel.panel_info.mipi.mdss_dsi_phy_db = &dsi_video_mode_phy_db;
+                                                panel.pll_clk_func = mdss_dsi_panel_clock;
+                                                panel.dfps_func = mdss_dsi_mipi_dfps_config;
+                                                panel.power_func = mdss_dsi_panel_power;
+                                                panel.pre_init_func = mdss_dsi_panel_pre_init;
+                                                panel.bl_func = mdss_dsi_bl_enable;
+                                                panel.dsi2HDMI_config = mdss_dsi2HDMI_config;/** Reserve fb memory to store pll codes and pass* pll codes values to kernel.*/
+                                                panel.panel_info.dfps.dfps_fb_base = base;
+                                                base += DFPS_PLL_CODES_SIZE;
+                                                panel.fb.base = base;
+                                                dprintf(SPEW, "dfps base=0x%p,d, fb_base=0x%p!\n",
+                                                panel.panel_info.dfps.dfps_fb_base, base);
+                                                panel.fb.width =  panel.panel_info.xres;
+                                                panel.fb.height =  panel.panel_info.yres;
+                                                panel.fb.stride =  panel.panel_info.xres;
+                                                panel.fb.bpp =  panel.panel_info.bpp;
+                                                panel.fb.format = panel.panel_info.mipi.dst_format;
+                                        }
+lk/dev/gcdb/display/gcdb_display.c
+
+msm_shared/display.c
+                                        msm_display_init()
+                                    {
+                                        int ret = NO_ERROR;
+                                        /* Resolution setting*/
+                                        pinfo->xres = pstruct->panelres->panel_width;
+                                        pinfo->yres = pstruct->panelres->panel_height;
+                                        pinfo->lcdc.h_back_porch = pstruct->panelres->hback_porch;
+                                        pinfo->lcdc.h_front_porch = pstruct->panelres->hfront_porch;
+                                        pinfo->lcdc.h_pulse_width = pstruct->panelres->hpulse_width;
+                                        pinfo->lcdc.v_back_porch = pstruct->panelres->vback_porch;
+                                        pinfo->lcdc.v_front_porch = pstruct->panelres->vfront_porch;
+                                        pinfo->lcdc.v_pulse_width = pstruct->panelres->vpulse_width;
+                                        pinfo->lcdc.hsync_skew = pstruct->panelres->hsync_skew;
+
+                                        pinfo->border_top = pstruct->panelres->vtop_border;
+                                        pinfo->border_bottom = pstruct->panelres->vbottom_border;
+                                        pinfo->border_left = pstruct->panelres->hleft_border;
+                                        pinfo->border_right = pstruct->panelres->hright_border;
+
+                                        dprintf(SPEW, "%s: left=%d right=%d top=%d bottom=%d\n", __func__,
+                                                pinfo->border_left, pinfo->border_right,
+                                                pinfo->border_top, pinfo->border_bottom);
+
+                                        pinfo->xres += (pinfo->border_left + pinfo->border_right);
+                                        pinfo->yres += (pinfo->border_top + pinfo->border_bottom);
+
+                                        dprintf(INFO, "panel_operating_mode=0x%x\n",
+                                                pstruct->paneldata->panel_operating_mode);
+                                        if (pstruct->paneldata->panel_operating_mode & DUAL_PIPE_FLAG)
+                                            pinfo->lcdc.dual_pipe = 1;
+                                        if (pstruct->paneldata->panel_operating_mode & PIPE_SWAP_FLAG)
+                                            pinfo->lcdc.pipe_swap = 1;
+                                        if (pstruct->paneldata->panel_operating_mode & SPLIT_DISPLAY_FLAG)
+                                            pinfo->lcdc.split_display = 1;
+                                        if (pstruct->paneldata->panel_operating_mode & DST_SPLIT_FLAG)
+                                            pinfo->lcdc.dst_split = 1;
+                                        if (pstruct->paneldata->panel_operating_mode & DUAL_DSI_FLAG)
+                                            pinfo->mipi.dual_dsi = 1;
+                                        if (pstruct->paneldata->panel_operating_mode & USE_DSI1_PLL_FLAG)
+                                            pinfo->mipi.use_dsi1_pll = 1;
+
+                                        dprintf(SPEW, "dual_pipe=%d pipe_swap=%d split_display=%d dst_split=%d\n",
+                                                pinfo->lcdc.dual_pipe, pinfo->lcdc.pipe_swap,
+                                                pinfo->lcdc.split_display, pinfo->lcdc.dst_split);
+
+                                        /* Color setting*/
+                                        pinfo->lcdc.border_clr = pstruct->color->border_color;
+                                        pinfo->lcdc.underflow_clr = pstruct->color->underflow_color;
+                                        pinfo->mipi.rgb_swap = pstruct->color->color_order;
+                                        pinfo->bpp = pstruct->color->color_format;
+                                        switch (pinfo->bpp) {
+                                            case BPP_16:
+                                                pinfo->mipi.dst_format = DSI_VIDEO_DST_FORMAT_RGB565;
+                                                break;
+                                            case BPP_18:
+                                                if (pstruct->color->pixel_packing)
+                                                    pinfo->mipi.dst_format
+                                                        = DSI_VIDEO_DST_FORMAT_RGB666_LOOSE;
+                                                else
+                                                    pinfo->mipi.dst_format
+                                                        = DSI_VIDEO_DST_FORMAT_RGB666;
+                                                break;
+                                            case BPP_24:
+                                            default:
+                                                pinfo->mipi.dst_format = DSI_VIDEO_DST_FORMAT_RGB888;
+                                                break;
+                                        }
+
+                                        /* Panel generic info */
+                                        pinfo->mipi.mode = pstruct->paneldata->panel_type;
+                                        if (pinfo->mipi.mode) {
+                                            pinfo->type = MIPI_CMD_PANEL;
+                                        } else {
+                                            pinfo->type = MIPI_VIDEO_PANEL;
+                                        }
+                                        pinfo->clk_rate = pstruct->paneldata->panel_clockrate;
+                                        pinfo->orientation = pstruct->paneldata->panel_orientation;
+                                        pinfo->mipi.interleave_mode = pstruct->paneldata->interleave_mode;
+                                        pinfo->mipi.broadcast = pstruct->paneldata->panel_broadcast_mode;
+                                        pinfo->mipi.vc = pstruct->paneldata->dsi_virtualchannel_id;
+                                        pinfo->mipi.frame_rate = pstruct->paneldata->panel_framerate;
+                                        pinfo->mipi.stream = pstruct->paneldata->dsi_stream;
+                                        pinfo->mipi.mode_gpio_state = pstruct->paneldata->mode_gpio_state;
+                                        pinfo->mipi.bitclock = pstruct->paneldata->panel_bitclock_freq;
+                                        if (pinfo->mipi.bitclock) {
+                                            /* panel_clockrate is depcrated in favor of bitclock_freq */
+                                            pinfo->clk_rate = pinfo->mipi.bitclock;
+                                        }
+                                        pinfo->mipi.use_enable_gpio =
+                                            pstruct->paneldata->panel_with_enable_gpio;
+                                        ret = dsi_panel_ctl_base_setup(pinfo,
+                                                pstruct->paneldata->panel_destination);
+                                        if (ret)
+                                            return ret;
+
+                                        /* Video Panel configuration */
+                                        pinfo->mipi.pulse_mode_hsa_he = pstruct->videopanel->hsync_pulse;
+                                        pinfo->mipi.hfp_power_stop = pstruct->videopanel->hfp_power_mode;
+                                        pinfo->mipi.hbp_power_stop = pstruct->videopanel->hbp_power_mode;
+                                        pinfo->mipi.hsa_power_stop = pstruct->videopanel->hsa_power_mode;
+                                        pinfo->mipi.eof_bllp_power_stop
+                                            = pstruct->videopanel->bllp_eof_power_mode;
+                                        pinfo->mipi.bllp_power_stop = pstruct->videopanel->bllp_power_mode;
+                                        pinfo->mipi.traffic_mode = pstruct->videopanel->traffic_mode;
+                                        pinfo->mipi.eof_bllp_power = pstruct->videopanel->bllp_eof_power;
+
+                                        /* Command Panel configuratoin */
+                                        pinfo->mipi.insert_dcs_cmd = pstruct->commandpanel->tedcs_command;
+                                        pinfo->mipi.wr_mem_continue
+                                            = pstruct->commandpanel->tevsync_continue_lines;
+                                        pinfo->mipi.wr_mem_start
+                                            = pstruct->commandpanel->tevsync_rdptr_irqline;
+                                        pinfo->mipi.te_sel = pstruct->commandpanel->tepin_select;
+                                        pinfo->autorefresh_enable = pstruct->commandpanel->autorefresh_enable;
+                                        pinfo->autorefresh_framenum =
+                                            pstruct->commandpanel->autorefresh_framenumdiv;
+
+                                        /* Data lane configuraiton */
+                                        pinfo->mipi.num_of_lanes = pstruct->laneconfig->dsi_lanes;
+                                        pinfo->mipi.data_lane0 = pstruct->laneconfig->lane0_state;
+                                        pinfo->mipi.data_lane1 = pstruct->laneconfig->lane1_state;
+                                        pinfo->mipi.data_lane2 = pstruct->laneconfig->lane2_state;
+                                        pinfo->mipi.data_lane3 = pstruct->laneconfig->lane3_state;
+                                        pinfo->mipi.lane_swap = pstruct->laneconfig->dsi_lanemap;
+                                        pinfo->mipi.force_clk_lane_hs = 1;//pstruct->laneconfig->force_clk_lane_hs;
+
+                                        pinfo->mipi.t_clk_post = pstruct->paneltiminginfo->tclk_post;
+                                        pinfo->mipi.t_clk_pre = pstruct->paneltiminginfo->tclk_pre;
+                                        pinfo->mipi.mdp_trigger = pstruct->paneltiminginfo->dsi_mdp_trigger;
+                                        pinfo->mipi.dma_trigger = pstruct->paneltiminginfo->dsi_dma_trigger;
+                                        pinfo->fbc.comp_ratio = 1;
+
+                                        if (pinfo->compression_mode == COMPRESSION_DSC) {
+                                            struct dsc_desc *dsc = &pinfo->dsc;
+                                            struct dsc_parameters *dsc_params = NULL;
+
+                                            if (!pstruct->config) {
+                                                dprintf(CRITICAL, "ERROR: DSC cannot be used without topology_config\n");
+                                                return ERR_NOT_ALLOWED;
+                                            }
+                                            dsc_params = pstruct->config->dsc;
+                                            if (!dsc_params) {
+                                                dprintf(CRITICAL, "ERROR: DSC params are NULL\n");
+                                                return ERR_INVALID_ARGS;
+                                            }
+
+                                            dsc->major = dsc_params->major;
+                                            dsc->minor = dsc_params->minor;
+                                            dsc->scr_rev = dsc_params->scr_rev;
+                                            dsc->pps_id = dsc_params->pps_id;
+                                            dsc->slice_height = dsc_params->slice_height;
+                                            dsc->slice_width = dsc_params->slice_width;
+                                            dsc->bpp = dsc_params->bpp;
+                                            dsc->bpc = dsc_params->bpc;
+                                            dsc->slice_per_pkt = dsc_params->slice_per_pkt;
+                                            dsc->block_pred_enable = dsc_params->block_prediction;
+                                            dsc->enable_422 = 0;
+                                            dsc->convert_rgb = 1;
+                                            dsc->vbr_enable = 0;
+
+                                            if (dsc->parameter_calc)
+                                                dsc->parameter_calc(pinfo);
+                                        } else if (pinfo->compression_mode == COMPRESSION_FBC) {
+                                            pinfo->fbc.enabled = pstruct->fbcinfo.enabled;
+                                            if (pinfo->fbc.enabled) {
+                                                pinfo->fbc.comp_ratio= pstruct->fbcinfo.comp_ratio;
+                                                pinfo->fbc.comp_mode = pstruct->fbcinfo.comp_mode;
+                                                pinfo->fbc.qerr_enable = pstruct->fbcinfo.qerr_enable;
+                                                pinfo->fbc.cd_bias = pstruct->fbcinfo.cd_bias;
+                                                pinfo->fbc.pat_enable = pstruct->fbcinfo.pat_enable;
+                                                pinfo->fbc.vlc_enable = pstruct->fbcinfo.vlc_enable;
+                                                pinfo->fbc.bflc_enable = pstruct->fbcinfo.bflc_enable;
+                                                pinfo->fbc.line_x_budget = pstruct->fbcinfo.line_x_budget;
+                                                pinfo->fbc.block_x_budget = pstruct->fbcinfo.block_x_budget;
+                                                pinfo->fbc.block_budget = pstruct->fbcinfo.block_budget;
+                                                pinfo->fbc.lossless_mode_thd = pstruct->fbcinfo.lossless_mode_thd;
+                                                pinfo->fbc.lossy_mode_thd = pstruct->fbcinfo.lossy_mode_thd;
+                                                pinfo->fbc.lossy_rgb_thd = pstruct->fbcinfo.lossy_rgb_thd;
+                                                pinfo->fbc.lossy_mode_idx = pstruct->fbcinfo.lossy_mode_idx;
+                                                pinfo->fbc.slice_height = pstruct->fbcinfo.slice_height;
+                                                pinfo->fbc.pred_mode = pstruct->fbcinfo.pred_mode;
+                                                pinfo->fbc.max_pred_err = pstruct->fbcinfo.max_pred_err;
+                                            }
+                                        }
+
+                                        pinfo->pre_on = dsi_panel_pre_on;
+                                        pinfo->pre_off = dsi_panel_pre_off;
+                                        pinfo->on = dsi_panel_post_on;
+                                        pinfo->off = dsi_panel_post_off;
+                                        pinfo->rotate = dsi_panel_rotation;
+                                        pinfo->config = dsi_panel_config;
+
+                                        return NO_ERROR;
+                                    }
+#############################################################
+kernel
+#############################################################
 "key":
         Acronym             Definition
         CLK     : Click
