@@ -12,7 +12,7 @@
 ======---------------------------------======
 =============================================
 
-LCD                                            ====================> 0001
+LCD                                            ====================> 0000
 
 =============================================
 ======---------------------------------======
@@ -423,3 +423,19 @@ lcd :bringup sim8930l
         PRODUCT_COPY_FILES += \
             external/devlib/devlib/bin/armeabi/busybox:root/sbin/busybox
 
+
+##########################################################################################################################
+0001                                                    Camera
+##########################################################################################################################
+Kernel:
+    kernel/drvier/media/platform/msm/camera_v2/
+        msm_sensor_driver.c
+            msm_sensor_driver_init
+                platform_driver_register(&msm_sensor_platform_driver);
+                    .probe = msm_sensor_driver_platform_probe   //解析dts里面参数
+                                                                //注册cci/i2c从设备.初始化通信逻辑
+                                                                //初始化sensor功能函数
+                i2c_add_driver(&msm_sensor_driver_i2c);
+                    .probe  = msm_sensor_driver_i2c_probe       //操作与platform probe一样
+
+    kernel/v4l2-core/
