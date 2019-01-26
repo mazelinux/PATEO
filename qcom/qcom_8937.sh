@@ -427,6 +427,15 @@ lcd :bringup sim8930l
 ##########################################################################################################################
 0001                                                    Camera
 ##########################################################################################################################
+1.最下面的是kernel层的驱动,其中按照V4L2架构实现了camera sensor等驱动,向用户空间提供/dev/video0节点;由于高通将大部分驱动逻辑代码放到了HAL层,因此在kernel部分只进行了V4L2的设备注册、IIC设备驱动等基本动作。
+2.在往上是HAL层,高通代码实现了对/dev/video0的基本操作,对接了android的camera相关的interface。(ps,HAL层的库中也封装了sensor端一些核心逻辑代码。将驱动的操作逻辑放在HAL层是为了避免linux的开源属性对厂商私有技术的泄露)
+3.再往上就是android的架构对camera的处理
+
+camera在kernel层的主文件为msm.c,负责设备的具体注册及相关方法的填充;
+     在msm_sensor.c文件中,主要维护高通自己的一个sensor相关结构体—msm_sensor_ctrl_t,同时把dts文件中的配置信息读取出来;
+     kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_sensor_driver.c,主要是把vendor下面的sensor_lib_t的设定填充到msm_sensor_ctrl_t中
+     在msm_sensor_init.c中主要是一些IOCTL处理,处理vendor传下来的IOCTL,vendor下面的power_setting,ret_setting等信息都是通过这里的ioctl传下来的
+
 Kernel:
     kernel/drvier/media/platform/msm/camera_v2/
         msm_sensor_driver.c
@@ -437,5 +446,10 @@ Kernel:
                                                                 //初始化sensor功能函数
                 i2c_add_driver(&msm_sensor_driver_i2c);
                     .probe  = msm_sensor_driver_i2c_probe       //操作与platform probe一样
+
+        msm_sensor_init.c
+            msm_sensor_init_module                              //Create /dev/v4l-subdevX for msm_sensor_init 
+            msm_sensor_driver_cmd
+                msm_sensor_driver_probe                         //异常重要.sensor的上下电逻辑,/dev/videox字符实现,v4l2_subdev结构的注册等等,均在这里
 
     kernel/v4l2-core/
