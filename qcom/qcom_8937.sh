@@ -451,6 +451,12 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
                 msm_sensor_driver_probe                         //异常重要.sensor的上下电逻辑,/dev/videox字符实现,v4l2_subdev结构的注册等等,均在这里
 
 
-在msm_sensor.c文件中,主要维护高通自己的一个sensor相关结构体—msm_sensor_ctrl_t,同时把dts文件中的配置信息读取出来;
-        msm_sensor.c异常重要,基本可以理解为sensor驱动的逻辑都在这里面;probe逻辑,上下电逻辑,msm_sensor_ctrl_t包含了所有操作接口
+在msm_sensor.c文件中,主要维护高通自己的一个sensor相关结构体—msm_sensor_ctrl_t,同时把dts文件中的配置信息读取出来;msm_sensor.c异常重要,基本可以理解为sensor驱动的逻辑都在这里面;probe逻辑,上下电逻辑,msm_sensor_ctrl_t包含了所有操作接口
+        msm_sensor.c
+        =========kernel调用顺序
+        msm_sensor_power_up
+        msm_sensor_config
+        msm_sensor_subdev_ioctl
+        =========用户空间调用顺序
+            
     kernel/v4l2-core/
