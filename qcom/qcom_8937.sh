@@ -459,4 +459,22 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
         msm_sensor_subdev_ioctl
         =========用户空间调用顺序
             
-    kernel/v4l2-core/
+
+
+
+ kernel 层的sensorprobe逻辑是
+ msm.c
+    msm_init
+    msm_probe
+    msm_init_queue
+    msm_sd_register[msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]中括号里面的设备挨个初始化
+ msm_sensor_init.c
+     msm_sensor_init_module
+     msm_sensor_driver_init
+ msm_sensor_driver.c
+     msm_sensor_driver_platform_probe 或者 msm_sensor_driver_i2c_probe  [两者的区别因该是一个走cci总线,一个走标准的i2c总线]
+     msm_sensor_driver_parse
+     msm_sensor_driver_get_dt_data
+     msm_sensor_init_default_params
+
+    kernel/v3l2-core/
