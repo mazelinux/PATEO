@@ -458,23 +458,39 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
         msm_sensor_config
         msm_sensor_subdev_ioctl
         =========用户空间调用顺序
-            
 
 
-
- kernel 层的sensorprobe逻辑是
+开机过程中 kernel 层的sensorprobe逻辑是
  msm.c
     msm_init
     msm_probe
     msm_init_queue
-    msm_sd_register[msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]中括号里面的设备挨个初始化
+
+    下面是循环逻辑
+    msm_sd_register        [msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]
+    中括号里面的设备挨个初始化,再往下的逻辑不是每个subdev都有的
+    中括号里面的设备挨个初始化,再往下的逻辑不是每个subdev都有的
+    msm_add_sd_in_position
+    __msm_sd_register_subdev
+    msm_cam_get_v4l2_subdev_fops_ptr
+    msm_cam_copy_v4l2_subdev_fops
+    msm_sd_notify
+    msm_sd_find
+    循环结束
+
+---------------------------------------------------------------------------------------
+单独看msm_sersor_init的逻辑线
  msm_sensor_init.c
      msm_sensor_init_module
      msm_sensor_driver_init
+
  msm_sensor_driver.c
      msm_sensor_driver_platform_probe 或者 msm_sensor_driver_i2c_probe  [两者的区别因该是一个走cci总线,一个走标准的i2c总线]
      msm_sensor_driver_parse
      msm_sensor_driver_get_dt_data
      msm_sensor_init_default_params
 
-    kernel/v3l2-core/
+
+
+
+    kernel/v4l2-core/
