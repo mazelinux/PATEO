@@ -510,7 +510,55 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
 
 =========================================================================
 initrc启动server的逻辑是
+ msm_sensor_init.c
+    msm_sensor_init_subdev_ioctl
+                    case VIDIOC_MSM_SENSOR_INIT_CFG:
+    msm_sensor_driver_cmd
+                    case CFG_SINIT_PROBE_WAIT_DONE:
+    msm_sensor_wait_for_probe_done
 
+ msm.c
+    msm_open           [open /dev/videoX]
+                    v4l2_fh_open
+    msm_pm_qos_add_request                  //register msm_v4l2_pm_qos_request
+                    pm_qos_add_request
+                    
+ msm_sensor_init.c
+    msm_sensor_init_subdev_ioctl
+                    case VIDIOC_MSM_SENSOR_INIT_CFG:
+    msm_sensor_driver_cmd
+                    case CFG_SINIT_PROBE:
+    msm_sensor_driver_probe
 
+ msm_sensor_driver.c
+    msm_sensor_driver_probe
+    msm_sensor_get_power_settings
+    msm_sensor_get_power_up_settings
+    msm_sensor_get_power_down_settings
+    msm_sensor_fill_eeprom_subdevid_by_name
+    msm_sensor_fill_actuator_subdevid_by_name
+    msm_sensor_fill_ois_subdevid_by_name
+    msm_sensor_fill_flash_subdevid_by_name
+    sensor_power_up              //msm_sensor.c .sensor_power_up = msm_sersor_power_up
+
+ msm_sensor.c
+    msm_sersor_power_up
+        msm_sensor_adjust_mclk
+        msm_camera_tz_i2c_power_up
+    msm_camera_power_up
+        msm_camera_pinctrl_init
+        msm_camera_request_gpio_table
+        pinctrl_select_state
+                    case SENSOR_CLK:
+                    case SENSOR_GPIO:
+                    case SENSOR_VREG:
+                    case SENSOR_I2C_MUX:
+    msm_sensor_check_id
+    msm_sensor_match_id
+        msm_sensor_id_by_mask
+
+ msm_sensor_driver.c
+    msm_sensor_driver_create_v4l_subdev
 
     kernel/v4l2-core/
+
