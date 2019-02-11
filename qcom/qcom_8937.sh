@@ -459,12 +459,22 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
         msm_sensor_subdev_ioctl
         =========用户空间调用顺序
 
-
+=========================================================================
 开机过程中 kernel 层的sensorprobe逻辑是
  msm.c
     msm_init
-    msm_probe
-    msm_init_queue
+    msm_probe   
+            video_device_alloc              //initialize the video_device struct
+            media_deivce_register           //register a media device
+            media_entity_init
+            v4l2_deivce_register            //initialize the v4l2_dev struct
+            video_register_device(vdev, VFL_TYPE_GRABBER, -1);          //注册video device，VFL_TYPE_GRABBER表示注册的是视频处理设备，video_nr=-1表示自动分配从设备号,成功会在dev下生成相应的type的节点 
+                                                                                            VFL_TYPE_GRABBER: 用于视频输入/输出设备的 videoX
+                                                                                            VFL_TYPE_VBI: 用于垂直消隐数据的 vbiX (例如，隐藏式字幕，图文电视)
+                                                                                            VFL_TYPE_RADIO: 用于广播调谐器的 radioX
+                                                                                            VFL_TYPE_SUBDEV:一个子设备v4l-subdevX 
+                                                                                            VFL_TYPE_SDR:Software Defined Radio swradioX
+    msm_init_queue         [msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]
 
     下面是循环逻辑
     msm_sd_register        [msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]
@@ -472,16 +482,22 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
     中括号里面的设备挨个初始化,再往下的逻辑不是每个subdev都有的
     msm_add_sd_in_position
     __msm_sd_register_subdev
+            v4l2_device_register_subdev     //initialize the v4l2_subdev struct
+            __video_register_device(vdev, VFL_TYPE_SUBDEV, -1, 1,sd->owner);    //注册video_device节点 /dev/v4l-subdevX
     msm_cam_get_v4l2_subdev_fops_ptr
     msm_cam_copy_v4l2_subdev_fops
     msm_sd_notify
     msm_sd_find
     循环结束
 
+    cam_ahb_clk_init
+
 ---------------------------------------------------------------------------------------
 单独看msm_sersor_init的逻辑线
  msm_sensor_init.c
      msm_sensor_init_module
+            v4l2_subdev_init(&s_init->msm_sd.sd, &msm_sensor_init_subdev_ops);
+            media_entity_init(&s_init->msm_sd.sd.entity, 0, NULL, 0);
      msm_sensor_driver_init
 
  msm_sensor_driver.c
@@ -489,7 +505,11 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
      msm_sensor_driver_parse
      msm_sensor_driver_get_dt_data
      msm_sensor_init_default_params
+=========================================================================
 
+
+=========================================================================
+initrc启动server的逻辑是
 
 
 
