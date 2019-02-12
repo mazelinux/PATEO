@@ -572,17 +572,19 @@ initrc启动server的逻辑是
     msm_sersor_power_up
         msm_sensor_adjust_mclk
         msm_camera_tz_i2c_power_up
-    msm_camera_power_up
-        msm_camera_pinctrl_init
-        msm_camera_request_gpio_table
-        pinctrl_select_state
-                    case SENSOR_CLK:
-                    case SENSOR_GPIO:
-                    case SENSOR_VREG:
-                    case SENSOR_I2C_MUX:
+        msm_camera_power_up
+            msm_camera_pinctrl_init
+            msm_camera_request_gpio_table
+            pinctrl_select_state
+            case SENSOR_CLK:
+                msm_camera_clk_enable
+            case SENSOR_GPIO:
+            case SENSOR_VREG:
+                msm_cam_sensor_handle_reg_gpio
+            case SENSOR_I2C_MUX:
     msm_sensor_check_id
-    msm_sensor_match_id
-        msm_sensor_id_by_mask
+        msm_sensor_match_id
+            msm_sensor_id_by_mask
 
  msm_sensor_driver.c
     msm_sensor_driver_create_v4l_subdev
@@ -596,19 +598,32 @@ initrc启动server的逻辑是
         v4l2_subdev_init            ///* Create /dev/v4l-subdevX device */
         v4l2_set_subdevdata
         media_entity_init
+        msm_sd_register             //msm.c msm_sd_register
 
  msm.c
     msm_sd_register                 //具体的摄像头sensor, tw9992
-    msm_add_sd_in_position
-    __msm_sd_register_subdev
+        msm_add_sd_in_position
+        __msm_sd_register_subdev
             v4l2_device_register_subdev     //initialize the v4l2_subdev struct
             __video_register_device(vdev, VFL_TYPE_SUBDEV, -1, 1,sd->owner);    //注册video_device节点 /dev/v4l-subdevX
     msm_cam_get_v4l2_subdev_fops_ptr
     msm_cam_copy_v4l2_subdev_fops
-    msm_sensor_power_down           ///* Power down */
+
+ msm_sensor.c
+    msm_sensor_power_down           ///* Power down */ msm_sensor.c .sensor_power_down = msm_sersor_power_down 
+        msm_camera_power_down
+            case SENSOR_CLK:
+                msm_camera_clk_enable
+            case SENSOR_GPIO:
+            case SENSOR_VREG:
+                msm_camera_get_power_settings
+                msm_cam_sensor_handle_reg_gpio
+            case SENSOR_I2C_MUX:
     msm_sensor_fill_slave_info_init_params
     msm_sensor_validate_slave_info
     msm_sensor_fill_sensor_info     ///*Save sensor info*/
+    kobject_create_and_add("camera", kernel_kobj)
+    sysfs_create_group(&s_ctrl->pdev->dev.kobj, &pateo_msm_attr_group);
     msm_subscribe_event
     .
     .
