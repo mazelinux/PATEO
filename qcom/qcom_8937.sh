@@ -478,7 +478,7 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
         msm_init_queue  
         cam_ahb_clk_init
     ##msm_probe end
-    下面是循环逻辑,这个循环逻辑其实就是在probe各种各样的qcom.camera框架下的外围器件,序列号代表执行次数.分别包含:
+    下面是循环逻辑,这个循环逻辑其实就是在probe各种各样的qcom.camera框架下的外围器件,序列号代表执行次数,当然这个数量是和你dts里面的配置挂钩的.分别包含:
      1                          "msm_cci_probe"             :msm/camera_v2/sensor/cci/msm_cci.c
      2                          "csiphy_probe"              :msm/camera_v2/sensor/csiphy/msm_csiphy.c//dts里面有2个
      3                          "csid_probe"                :msm/camera_v2/sensor/csid/msm_csid.c    //dts里面有3个
@@ -505,17 +505,23 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
 
 ---------------------------------------------------------------------------------------
 单独看msm_sersor_init的逻辑线
+##msm_sensor_init_module start
  msm_sensor_init.c
      msm_sensor_init_module
-            v4l2_subdev_init(&s_init->msm_sd.sd, &msm_sensor_init_subdev_ops);
-            media_entity_init(&s_init->msm_sd.sd.entity, 0, NULL, 0);
-     msm_sensor_driver_init
+        v4l2_subdev_init(&s_init->msm_sd.sd, &msm_sensor_init_subdev_ops);
+        media_entity_init(&s_init->msm_sd.sd.entity, 0, NULL, 0);
+        msm_sd_register
+##msm_sensor_init_module end
 
+##msm_sensor_driver_init start
  msm_sensor_driver.c
+ msm_sensor_driver_init
      msm_sensor_driver_platform_probe 或者 msm_sensor_driver_i2c_probe  [两者的区别因该是一个走cci总线,一个走标准的i2c总线]
-     msm_sensor_driver_parse
-     msm_sensor_driver_get_dt_data
-     msm_sensor_init_default_params
+        msm_sensor_driver_parse
+            msm_sensor_driver_get_dt_data
+            msm_sensor_init_default_params
+        msm_camera_get_clk_info
+##msm_sensor_driver_init end
 =========================================================================
 
 
@@ -525,34 +531,42 @@ initrc启动server的逻辑是
 ##上层下发probewait命令
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
-                    case VIDIOC_MSM_SENSOR_INIT_CFG:
-    msm_sensor_driver_cmd
-                    case CFG_SINIT_PROBE_WAIT_DONE:
-    msm_sensor_wait_for_probe_done
+        case VIDIOC_MSM_SENSOR_INIT_CFG:
+        msm_sensor_driver_cmd
+            case CFG_SINIT_PROBE_WAIT_DONE:
+            msm_sensor_wait_for_probe_done
+                wait_event_timeout
+##上层下发probewait命令结束
 
+##上层打开video节点
  msm.c
     msm_open           [open /dev/videoX]
-                    v4l2_fh_open
-    msm_pm_qos_add_request                  //register msm_v4l2_pm_qos_request
-                    pm_qos_add_request
+        v4l2_fh_open                            ///* create event queue */
+            v4l2_fh_init
+            v4l2_fh_add
+        msm_pm_qos_add_request                  //register msm_v4l2_pm_qos_request
+            pm_qos_add_request
+
 ##上层下发probe命令                    
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
-                    case VIDIOC_MSM_SENSOR_INIT_CFG:
-    msm_sensor_driver_cmd
-                    case CFG_SINIT_PROBE:
-    msm_sensor_driver_probe
+        case VIDIOC_MSM_SENSOR_INIT_CFG:
+        msm_sensor_driver_cmd
+            case CFG_SINIT_PROBE:
+            msm_sensor_driver_probe
 
  msm_sensor_driver.c
     msm_sensor_driver_probe
-    msm_sensor_get_power_settings
-    msm_sensor_get_power_up_settings
-    msm_sensor_get_power_down_settings
-    msm_sensor_fill_eeprom_subdevid_by_name
-    msm_sensor_fill_actuator_subdevid_by_name
-    msm_sensor_fill_ois_subdevid_by_name
-    msm_sensor_fill_flash_subdevid_by_name
-    sensor_power_up              //msm_sensor.c .sensor_power_up = msm_sersor_power_up
+        msm_sensor_get_power_settings
+            msm_sensor_get_power_up_settings
+            msm_sensor_get_power_down_settings
+        msm_camera_fill_vreg_params             ///* Parse and fill vreg params for powerup settings */
+        msm_camera_fill_vreg_params             ///* Parse and fill vreg params for powerdown settings*/
+        msm_sensor_fill_eeprom_subdevid_by_name //Update eeporm subdevice Id by input eeprom name
+        msm_sensor_fill_actuator_subdevid_by_name //Update actuator subdevice Id by input actuator name
+        msm_sensor_fill_ois_subdevid_by_name
+        msm_sensor_fill_flash_subdevid_by_name
+        sensor_power_up                             //msm_sensor.c .sensor_power_up = msm_sersor_power_up  /* Power up and probe sensor */
 
  msm_sensor.c
     msm_sersor_power_up
@@ -603,9 +617,9 @@ initrc启动server的逻辑是
 ##上层下发
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
-                    case VIDIOC_MSM_SENSOR_INIT_CFG:
-    msm_sensor_driver_cmd
-                    case CFG_SINIT_PROBE_DONE:
+        case VIDIOC_MSM_SENSOR_INIT_CFG:
+        msm_sensor_driver_cmd
+            case CFG_SINIT_PROBE_DONE:
 
     kernel/v4l2-core/
 
