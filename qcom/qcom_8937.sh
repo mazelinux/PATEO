@@ -463,20 +463,32 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
 开机过程中 kernel 层的sensorprobe逻辑是
  msm.c
     msm_init
-    msm_probe   
-            video_device_alloc              //initialize the video_device struct
-            media_deivce_register           //register a media device
-            media_entity_init
-            v4l2_deivce_register            //initialize the v4l2_dev struct
-            video_register_device(vdev, VFL_TYPE_GRABBER, -1);          //注册video device，VFL_TYPE_GRABBER表示注册的是视频处理设备，video_nr=-1表示自动分配从设备号,成功会在dev下生成相应的type的节点 
+    ##msm_probe start
+      msm_probe   
+        video_device_alloc              //initialize the video_device struct
+        media_deivce_register           //register a media device
+        media_entity_init
+        v4l2_deivce_register            //initialize the v4l2_dev struct
+        video_register_device(vdev, VFL_TYPE_GRABBER, -1);          //注册video device，VFL_TYPE_GRABBER表示注册的是视频处理设备，video_nr=-1表示自动分配从设备号,成功会在dev下生成相应的type的节点 
                                                                                             VFL_TYPE_GRABBER: 用于视频输入/输出设备的 videoX
                                                                                             VFL_TYPE_VBI: 用于垂直消隐数据的 vbiX (例如，隐藏式字幕，图文电视)
                                                                                             VFL_TYPE_RADIO: 用于广播调谐器的 radioX
                                                                                             VFL_TYPE_SUBDEV:一个子设备v4l-subdevX 
                                                                                             VFL_TYPE_SDR:Software Defined Radio swradioX
-    msm_init_queue         [msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]
+        msm_init_queue  
+        cam_ahb_clk_init
+    ##msm_probe end
+    下面是循环逻辑,这个循环逻辑其实就是在probe各种各样的qcom.camera框架下的外围器件,序列号代表执行次数.分别包含:
+     1                          "msm_cci_probe"             :msm/camera_v2/sensor/cci/msm_cci.c
+     2                          "csiphy_probe"              :msm/camera_v2/sensor/csiphy/msm_csiphy.c//dts里面有2个
+     3                          "csid_probe"                :msm/camera_v2/sensor/csid/msm_csid.c    //dts里面有3个
+     2                          "msm_actuator_i2c_probe或者msm_actuator_platform_probe" :msm/camera_v2/sensor/actuator/msm_actuator.c
+     1                          "msm_sensor_init_module"    :msm/camera_v2/sensor/msm_sensor_init.c
+     1                          "cpp_probe"                 :msm/camera_v2/pproc/cpp/msm_cpp.c
+     1                          "vfe_probe"                 :msm/camera_v2/isp/msm_isp_32.c
+     1                          "ispif_probe"               :msm/camera_v2/ispif/msm_ispif_32.c
+     1                          "msm_buf_mngr_init"         :msm/camera_v2/msm_buf_mgr/msm_generic_buf_mgr.c
 
-    下面是循环逻辑
     msm_sd_register        [msm_cci/msm_csiphy/msm_csid/msm_actuator/msm_sensor_init/cpp/vfe/msm_ispif/msm_buf_mngr/]
     中括号里面的设备挨个初始化,再往下的逻辑不是每个subdev都有的
     中括号里面的设备挨个初始化,再往下的逻辑不是每个subdev都有的
@@ -490,7 +502,6 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
     msm_sd_find
     循环结束
 
-    cam_ahb_clk_init
 
 ---------------------------------------------------------------------------------------
 单独看msm_sersor_init的逻辑线
@@ -510,6 +521,8 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
 
 =========================================================================
 initrc启动server的逻辑是
+
+##上层下发probewait命令
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
                     case VIDIOC_MSM_SENSOR_INIT_CFG:
@@ -522,7 +535,7 @@ initrc启动server的逻辑是
                     v4l2_fh_open
     msm_pm_qos_add_request                  //register msm_v4l2_pm_qos_request
                     pm_qos_add_request
-                    
+##上层下发probe命令                    
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
                     case VIDIOC_MSM_SENSOR_INIT_CFG:
@@ -559,6 +572,40 @@ initrc启动server的逻辑是
 
  msm_sensor_driver.c
     msm_sensor_driver_create_v4l_subdev
+        camera_init_v4l2
+            video_device_alloc
+            media_device_register
+            media_entity_init
+            v4l2_device_register
+            video_register_device
+            device_init_wakeup
+        v4l2_subdev_init            ///* Create /dev/v4l-subdevX device */
+        v4l2_set_subdevdata
+        media_entity_init
+
+ msm.c
+    msm_sd_register                 //具体的摄像头sensor, tw9992
+    msm_add_sd_in_position
+    __msm_sd_register_subdev
+            v4l2_device_register_subdev     //initialize the v4l2_subdev struct
+            __video_register_device(vdev, VFL_TYPE_SUBDEV, -1, 1,sd->owner);    //注册video_device节点 /dev/v4l-subdevX
+    msm_cam_get_v4l2_subdev_fops_ptr
+    msm_cam_copy_v4l2_subdev_fops
+    msm_sensor_power_down           ///* Power down */
+    msm_sensor_fill_slave_info_init_params
+    msm_sensor_validate_slave_info
+    msm_sensor_fill_sensor_info     ///*Save sensor info*/
+    msm_subscribe_event
+    .
+    .
+    .
+
+##上层下发
+ msm_sensor_init.c
+    msm_sensor_init_subdev_ioctl
+                    case VIDIOC_MSM_SENSOR_INIT_CFG:
+    msm_sensor_driver_cmd
+                    case CFG_SINIT_PROBE_DONE:
 
     kernel/v4l2-core/
 
