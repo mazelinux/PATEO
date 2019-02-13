@@ -541,7 +541,7 @@ initrc启动server的逻辑是
 ##上层打开video节点
  msm.c
     msm_open           [open /dev/videoX]
-        v4l2_fh_open                            ///* create event queue */
+        v4l2_fh_open                            ///* create event queue */调用v4l2_fh_open函数打开Camera,该函数会创建event队列等进行一些其他操作
             v4l2_fh_init
             v4l2_fh_add
         msm_pm_qos_add_request                  //register msm_v4l2_pm_qos_request
@@ -628,6 +628,7 @@ initrc启动server的逻辑是
     .
     .
     .
+                    // 最终就是调用msm_camera_power_up上电，msm_sensor_match_id识别sensor id，调用tw9992 probe()探测函数去完成匹配设备和驱动的工作，msm_camera_power_down下电！
 ##上层下发probe命令结束                    
 
 ##上层下发probe_done 开始
@@ -643,6 +644,7 @@ initrc启动server的逻辑是
         poll_wait
         if (v4l2_event_pending(eventq))
             rc = POLLIN | POLLRDNORM;
+    camera_v4l2_open
     msm_pm_qos_update_request
         pm_qos_update_request
     msm_create_session
@@ -667,6 +669,7 @@ initrc启动server的逻辑是
     msm_sensor_config
     .
     .
+    camera_v4l2_poll
     .
 
     kernel/v4l2-core/
