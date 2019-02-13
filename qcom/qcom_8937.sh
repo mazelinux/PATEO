@@ -628,13 +628,46 @@ initrc启动server的逻辑是
     .
     .
     .
+##上层下发probe命令结束                    
 
-##上层下发
+##上层下发probe_done 开始
  msm_sensor_init.c
     msm_sensor_init_subdev_ioctl
         case VIDIOC_MSM_SENSOR_INIT_CFG:
         msm_sensor_driver_cmd
             case CFG_SINIT_PROBE_DONE:
+            wake_up(&s_init->state_wait);
+##probe_done 结束
+ msm.c                              //msm.c:1132:   .poll   = msm_poll,
+    msm_poll                        //poll机制向用户层服务传递是否可以[读写的/节点是否可执行的]信号.
+        poll_wait
+        if (v4l2_event_pending(eventq))
+            rc = POLLIN | POLLRDNORM;
+    msm_pm_qos_update_request
+        pm_qos_update_request
+    msm_create_session
+        msm_init_queue(&session->command_ack_q);
+        msm_init_queue(&session->stream_q);
+        msm_enqueue(msm_session_q, &session->list);
+    msm_create_command_ack_q
+    __msm_queue_find_session
+    msm_init_queue
+    msm_enqueue
+    msm_post_event
+    __msm_queue_find_session
+    __msm_queue_find_command_ack_q
+    msm_poll
+    msm_sensor_subdev_ioctl
+    msm_sensor_config
+    msm_sensor_power_up
+    msm_sensor_check_id
+    msm_sensor_match_id
+    msm_sensor_id_by_mask
+    msm_sensor_subdev_ioctl
+    msm_sensor_config
+    .
+    .
+    .
 
     kernel/v4l2-core/
 
