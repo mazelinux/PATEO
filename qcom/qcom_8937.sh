@@ -13,6 +13,7 @@
 =============================================
 
 LCD                                            ====================> 0000
+Camera                                         ====================> 0001
 
 =============================================
 ======---------------------------------======
@@ -501,9 +502,10 @@ kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_senso
     msm_sd_notify
     msm_sd_find
     循环结束
+=========================================================================
 
 
----------------------------------------------------------------------------------------
+=========================================================================
 单独看msm_sersor_init的逻辑线
 ##msm_sensor_init_module start
  msm_sensor_init.c
@@ -672,5 +674,43 @@ initrc启动server的逻辑是
     camera_v4l2_poll
     .
 
-    kernel/v4l2-core/
 
+    kernel/v4l2-core/
+=========================================================================
+
+=========================================================================
+                                QCOM deamon
+=========================================================================
+daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main 函数的 入口，位置如下：
+    /project/vendor/qcom/proprietary/mm-camera/mm-camera2/server-imaging/server.c
+    1.找到服务节点的名字并打开此节点/* 1. find server node name and open the node */
+        get_server_node_name(serv_al_node_name)                 //这里的serv_al_node_name为video0
+            dev_fd = open(dev_name, O_RDWR | O_NONBLOCK);       //dev_name为/dev/media0
+            ioctl(dev_fd, MEDIA_IOC_DEVICE_INFO, &mdev_info);   //往media0下命令
+            ioctl(dev_fd, MEDIA_IOC_ENUM_ENTITIES, &entity);
+                ......
+        hal_fd->fd[0] = open(dev_name, O_RDWR | O_NONBLOCK);    //这里dev_name为节点名“/dev/video0”
+
+    2.初始化模块。目前有sensor、iface、isp、stats、pproc及imglib六个模块/* 2. after open node, initialize modules */
+        server_process_module_sensor_init();                    //只是初始化 modules_list[0],即执行module_sensor_init
+                    static mct_module_init_name_t modules_list[] = {
+                        {"sensor", module_sensor_init,   module_sensor_deinit, NULL},
+                        {"iface",  module_iface_init,   module_iface_deinit, NULL},
+                        {"isp",    module_isp_init,      module_isp_deinit, NULL},
+                        {"stats",  stats_module_init,    stats_module_deinit, NULL},
+                        {"pproc",  pproc_module_init,    pproc_module_deinit, NULL},
+                        {"imglib", module_imglib_init, module_imglib_deinit, NULL},
+                    };
+            module_sensor_init        异常重要                  // This function creates mct_module_t for sensor module,creates port, fills capabilities and add it to the sensor module
+                mct_module_create(name);                        // name: sensor
+                sensor_init_probe
+
+        server_process_module_init();                           //执行modules_list其余部分的初始化工作
+
+        subscribe.type = MSM_CAMERA_V4L2_EVENT_TYPE;
+        ioctl(hal_fd->fd[0], VIDIOC_SUBSCRIBE_EVENT, &subscribe) //打开的文件是dev/video0,ioctl调用的是kernel/drivers/media/platform/msm/camera_v2/camera/camera.c中camera_init_v4l2函数执行的video_register_device里面的camera_v4l2_ioctl_ops里面的camera_v4l2_subscribe_event订阅事件
+
+        mct_util_find_v4l2_subdev(probe_done_node_name)
+        snprintf(probe_done_dev_name, sizeof(probe_done_dev_name), "/dev/%s",probe_done_node_name);
+        open(probe_done_dev_name, O_RDWR | O_NONBLOCK);
+        nioctl(probe_done_fd, VIDIOC_MSM_SENSOR_INIT_CFG, &cfg) //找到并打开对应的sub_dev节点.也就是我们最主要的sensor节点:kernel/msm-3.18/drivers/media/platform/msm/camera_v2/sensor/msm_sensor_init.c里面的ioctl:wake_up(&s_init->state_wait); 
