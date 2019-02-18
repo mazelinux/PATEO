@@ -701,7 +701,9 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
                         {"pproc",  pproc_module_init,    pproc_module_deinit, NULL},
                         {"imglib", module_imglib_init, module_imglib_deinit, NULL},
                     };
-            module_sensor_init        异常重要                  // This function creates mct_module_t for sensor module,creates port, fills capabilities and add it to the sensor module
+            module_sensor_init        异常重要                  // This function creates mct_module_t for sensor module,creates port, fills capabilities and add it to the sensor module;
+            函数中，通过判断entity.type == MEDIA_ENT_T_V4L2_SUBDEV &&entity.group_id == MSM_CAMERA_SUBDEV_SENSOR_INIT，找到相应的/dev/v4l-subdevX节点并打开，并通过LOG_IOCTL(fd, VIDIOC_MSM_SENSOR_INIT_CFG, &cfg)，将sensor IC的有关信息拷贝到内核空间，调用msm_sensor_driver_probe()函数，/* Power up and probe sensor */:rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);  rc为0，表明sensro I2C通信正常，接着通过msm_sensor_driver_create_i2c_v4l_subdev()，生成了/dev/media1&/dev/video1(后摄像头)和/dev/media2&/dev/video2(前摄像头)节点，并通过msm_sd_register(&s_ctrl->msm_sd)注册前后摄像头的sensor。
+
                 mct_module_create(name);                        // name: sensor
                 sensor_init_probe
                     sensor_init_eebin_probe(module_ctrl, sd_fd);或者sensor_init_xml_probe(module_ctrl, sd_fd)
@@ -721,3 +723,36 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
         ioctl(probe_done_fd, VIDIOC_MSM_SENSOR_INIT_CFG, &cfg) //找到并打开对应的sub_dev节点.也就是我们最主要的sensor节点:kernel/msm-3.18/drivers/media/platform/msm/camera_v2/sensor/msm_sensor_init.c里面的ioctl:wake_up(&s_init->state_wait); 
         ...
 
+    3.进入主循环来处理来自HAL及MCT的事件及消息，处理完之后的结果反馈给kernel（msm.c)
+    typedef enum _read_fd_type {
+        RD_FD_HAL, ----------------server_process_hal_event(&event)---返回真，说明消息传递给 MCT，这时不需要发送CMD ACK给kernel，因为MCT处理结束后会发出通知；反之没有，此时需要立即发送CMD ACK到kernel，以免HAL发送此消息的线程阻塞住;用来处理kernel的node update
+            case MSM_CAMERA_NEW_SESSION:
+                mct_controller_new();
+            ...
+            case MSM_CAMERA_DEL_SESSION:
+                mct_controller_destory();
+            ...
+                mct_controller_proc_serv_msg();
+                                           
+        RD_DS_FD_HAL, ----------server_process_hal_ds_packet()---来自 HAL 层的消息,通过domain socket 传;用来处理mapping buffer的socket messages
+                                             
+        RD_PIPE_FD_MCT, ----------------server_process_mct_msg()---来自 media controller 的消息，通过pipe；用来处理mct的update buffer manager: buffer type: matedata 和frame buffers main
+        RD_FD_NONE
+    } read_fd_type;
+
+    4.media controller线程
+    a.概述
+        MCT线程是camera新架构的引擎部分，负责对管道的监控，由此来完成一个camera设备的控制运转。它运行在daemon进程空间，由MSM_CAMERA_NEW_SESSION事件来开启，具体开启函数为server_process_hal_event--->mct_controller_new()。
+
+    b.mct_controller_new()函数
+        此函数创建一个新的MCT引擎，这将对应一个事务的pipeline。我们知道上层可以创建多个事务，每个对应一个camera，也对应自己的MCT及pipeline等。因此这个函数的主要完成以下几件事情：
+        1.mct_pipeline_new()                                    ---->创建一个Pipeline及其bus，并完成pipeline函数的映射。
+        2.mct_pipeline_start_session()                          ---->开启camera的所有模块并查询其能力
+        3.pthread_create(..., mct_controller_thread_run, ...)   ---->创建mct线程并开始执行
+        4.pthread_create(..., mct_bus_handler_thread_run, ...)  ---->创建bus处理线程
+
+    c.MCT线程运行
+        MCT整个引擎部分主要处理server及bus两类事情，对应前面提到的MCT及bus两个线程。MCT线程主要用来处理来自image server的消息，先pop MCT queue，查看是否有消息，如果有则执行mct_controller_proc_serv_msg_internal（）函数来处理。mct_controller_proc_serv_msg_internal函数用来处理来自image server的消息，并返回类型MCT_PROCESS_RET_SERVER_MSG。这里处理的消息类型主要有SERV_MSG_DS与SERV_MSG_HAL两种，分别在pipline中给出了相应的处理函数，具体查看源码可知。
+
+    d.bus线程运行
+        bus线程跟MCT线程流程一样。从代码上我们看到两个线程都是从同一个queue上面pop消息，他们是通过各自的线程条件变量来进行区分，完成线程的阻塞及运行工作。MCT的条件变量mctl_cond可以看到是在server_process.c文件中标记的，而bus的条件变量mctl_bus_handle_cond未在源码中找到标志的位置？
