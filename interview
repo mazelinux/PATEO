@@ -2,10 +2,15 @@
 1.介绍一下你做过的模块
     tp,lcd,camera
 2.tp如何在系统睡眠的情况下唤醒系统(功能)
-    首先要保证的是,tp驱动不能走正常的suspend流程;
+    1.
+    首先要保证的是,tp驱动正常的suspend流程不睡眠;
+    request_irq 的flag加irq_no_suspend;
     修改suspend流程,suspend流程里面加入flag全局变量为1;
     修改正常的irq下半部,if flag == 1此时触摸屏幕,则上报keyevent_Power事件;
     修改resume流程,resume流程里面把flag全局变量置0
+
+    2. suspend :enable_irq_wakeup
+       resuem  :disable_irq_wakeup
 
 3.什么是原子操作;i++是不是原子操作
     linux原子操作问题来源于中断、进程的抢占以及多核smp系统中程序的并发执行。
@@ -839,8 +844,66 @@
                 printf("Client exited.\n");    
             }
 
+            a.阻塞和非阻塞（SOCK_STREAM方式）
+                读写操作有两种操作方式：阻塞和非阻塞。
+                1.阻塞模式下
+                阻塞模式下，发送数据方和接收数据方的表现情况如同命名管道.
+                2.非阻塞模式
+                在send或recv函数的标志参数中设置MSG_DONTWAIT，则发送和接收都会返回。如果没有成功，则返回值为-1，errno为EAGAIN 或 EWOULDBLOCK。
+
+            b.socket进程通信命名方式有两种。一是普通的命名，socket会根据此命名创建一个同名的socket文件，客户端连接的时候通过读取该socket文件连接到socket服务端。这种方式的弊端是服务端必须对socket文件的路径具备写权限，客户端必须知道socket文件路径，且必须对该路径有读权限。;另外一种命名方式是抽象命名空间，这种方式不需要创建socket文件，只需要命名一个全局名字，即可让客户端根据此名字进行连接。后者的实现过程与前者的差别是，后者在对地址结构成员sun_path数组赋值的时候，必须把第一个字节置0，即sun_path[0] = 0，下面用代码说明：
+            第一种方式：
+            //name the server socket 
+            server_addr.sun_family = AF_UNIX;
+            strcpy(server_addr.sun_path,"/tmp/UNIX.domain");
+            server_len = sizeof(struct sockaddr_un);
+            client_len = server_len;
+
+            第二种方式：
+            #define SERVER_NAME @socket_server
+            //name the socket
+            server_addr.sun_family = AF_UNIX;
+            strcpy(server_addr.sun_path, SERVER_NAME);
+            server_addr.sun_path[0]=0;
+            //server_len = sizeof(server_addr);
+            server_len = strlen(SERVER_NAME)  + offsetof(struct sockaddr_un, sun_path);
+
+            其中，offsetof函数在#include <stddef.h>头文件中定义。因第二种方式的首字节置0，我们可以在命名字符串SERVER_NAME前添加一个占位字符串，例如:#define SERVER_NAME @socket_server  
+                前面的@符号就表示占位符，不算为实际名称。
+                提示：客户端连接服务器的时候，必须与服务端的命名方式相同，即如果服务端是普通命名方式，客户端的地址也必须是普通命名方式；如果服务端是抽象命名方式，客户端的地址也必须是抽象命名方式。
+
+            c.offsetof :结构体某个成员相对于结构体首地址的偏移量
+            struct S2
+            {
+                int i;
+                char c;
+            };
+            例如，想要获得S2中c的偏移量，方法为:size_t pos = offsetof(S2, c);// pos等于4
 
 5.i2c主从设备交互逻辑-ack
-6.spi有几种方式
+6.spi有几种方式 
+          https://blog.csdn.net/quartu_flag/article/details/78196221                  需要看图!
+          SPI接口的全称是"Serial Peripheral Interface",意为串行外围接口,是Motorola首先在其MC68HCXX系列处理器上定义的。SPI接口主要应用在EEPROM,FLASH,实时时钟,AD转换器,还有数字信号处理器和数字信号解码器之间。
+          SPI接口是在CPU和外围低速器件之间进行同步串行数据传输,在主器件的移位脉冲下,数据按位传输,高位在前,地位在后,为全双工通信,数据传输速度总体来说比I2C总线要快,速度最高可达到5Mbps。
+          SPI接口是以主从方式工作的,这种模式通常有一个主器件和一个或多个从器件,其接口包括以下四种信号：
+          （1）MOSI– 主器件数据输出,从器件数据输入
+          （2）MISO– 主器件数据输入,从器件数据输出
+          （3）SCLK– 时钟信号,由主器件产生
+          （4）/SS  – 从器件使能信号,由主器件控制
+
+          spi四种模式SPI的相位(CPHA)和极性(CPOL)分别可以为0或1，对应的4种组合构成了SPI的4种模式(mode)
+
+          Mode 0 CPOL=0, CPHA=0 
+          Mode 1 CPOL=0, CPHA=1
+          Mode 2 CPOL=1, CPHA=0 
+          Mode 3 CPOL=1, CPHA=1
+
+          时钟极性CPOL: 即SPI空闲时，时钟信号SCLK的电平（1:空闲时高电平; 0:空闲时低电平）
+          时钟相位CPHA: 即SPI在SCLK第几个边沿开始采样（0:第一个边沿开始; 1:第二个边沿开始）
+          sd卡的spi常用的是mode 0 和mode 3，这两种模式的相同的地方是都在时钟上升沿采样传输数据，区别这两种方式的简单方法就是看空闲时，时钟的电平状态，低电平为mode 0 ，高电平为mode 3。
+
+          最后,SPI接口的一个缺点：没有指定的流控制,没有应答机制确认是否接收到数据。ack机制,i2c有的.
+
+
 7.写一个完整的回调函数
 
