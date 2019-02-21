@@ -437,6 +437,18 @@ camera在kernel层的主文件为msm.c,负责设备的具体注册及相关方�
 Kernel:
 kernel/drvier/media/platform/msm/camera_v2/
 
+摄像头内核驱动包含两个主文件。必要时,可添加更多日志以方便调试:
+
+    kernel/drivers/media/platform/msm/camera_v2/msm.c
+    1.创建 MSM 芯片组配置节点
+    2.设置会话队列
+    3.将事件发到 mm-camera 后端并等待答复
+    4.管理 V4L2 数据流和缓存
+    kernel/drivers/media/platform/msm/camera_v2/camera/camera.c
+    1.开机时创建视频设备节点
+    2.包含服务于 V4L2 IOCTL 和文件操作的函数
+    3.创建会话和数据流
+
 kernel层对于不同的sensor对应自己的同一个驱动文件 — msm_sensor_driver.c,主要是把vendor下面的sensor_lib_t的设定填充到msm_sensor_ctrl_t中
         msm_sensor_driver.c
             msm_sensor_driver_init
@@ -755,4 +767,13 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
         MCT整个引擎部分主要处理server及bus两类事情，对应前面提到的MCT及bus两个线程。MCT线程主要用来处理来自image server的消息，先pop MCT queue，查看是否有消息，如果有则执行mct_controller_proc_serv_msg_internal（）函数来处理。mct_controller_proc_serv_msg_internal函数用来处理来自image server的消息，并返回类型MCT_PROCESS_RET_SERVER_MSG。这里处理的消息类型主要有SERV_MSG_DS与SERV_MSG_HAL两种，分别在pipline中给出了相应的处理函数，具体查看源码可知。
 
     d.bus线程运行
-        bus线程跟MCT线程流程一样。从代码上我们看到两个线程都是从同一个queue上面pop消息，他们是通过各自的线程条件变量来进行区分，完成线程的阻塞及运行工作。MCT的条件变量mctl_cond可以看到是在server_process.c文件中标记的，而bus的条件变量mctl_bus_handle_cond未在源码中找到标志的位置？
+        bus线程跟MCT线程流程一样。从代码上我们看到两个线程都是从同一个queue上面pop消息，他们是通过各自的线程条件变量来进行区分，完成线程的阻塞及运行工作。MCT的条件变量mctl_cond可以看到是在server_process.c文件中标记的，而bus的条件变量mctl_bus_handle_cond未在源码中找到标志的位置.
+
+=========================================================================
+                                QCOM CAMERA HAL
+=========================================================================
+源代码位于 HAL 及 mm-camera-interface 层。摄像头前端代码位于hardware/qcom/camera/QCamera2 文件夹。
+摄像头前端软件位于以下子目录中:
+/HAL – 包含摄像头核心 HAL 源代码
+/Stack – 包含 mm-camera 及 mm-jpeg 接口源代码
+/Util – 包含 HAL 所用的实用程序源代码
