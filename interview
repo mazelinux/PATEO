@@ -3,7 +3,7 @@
     tp,lcd,camera
 2.tp如何在系统睡眠的情况下唤醒系统(功能)
     1.
-    首先要保证的是,tp驱动正常的suspend流程不睡眠;
+    首先要保证的是,tp驱动正常的suspend流程不睡眠;[硬件上要保证不断电]
     request_irq 的flag加irq_no_suspend;
     修改suspend流程,suspend流程里面加入flag全局变量为1;
     修改正常的irq下半部,if flag == 1此时触摸屏幕,则上报keyevent_Power事件;
@@ -130,13 +130,13 @@
         {
             int ret = mkfifo(_PATH_,0666 | S_IFIFO); //创建有名管道/tmp/file.tmp
             int fd = open(_PATH_,O_WRONLY);          //打开
-            char buf[_SIZE];
+            char buf[_SIZE_];
             memset(buf,'\0',strlen(buf)+1);
             while(1)
             {
                 printf("输入命令");
                 scanf("%s",buf);
-                int ret = write(fd,buf,strlen(buf)+1);//写入数据
+                int ret = write(fd,buf,strlen(buf)+1);//写入数据,最后那个+1存储的是'\0'结束位
             };
         close(fd);
         }
@@ -881,6 +881,8 @@
             例如，想要获得S2中c的偏移量，方法为:size_t pos = offsetof(S2, c);// pos等于4
 
 5.i2c主从设备交互逻辑-ack
+          i2c通信逻辑.主发消息给从read/write 从接收到消息.发ack. 主接收到消息.再发ack给从
+
 6.spi有几种方式 
           https://blog.csdn.net/quartu_flag/article/details/78196221                  需要看图!
           SPI接口的全称是"Serial Peripheral Interface",意为串行外围接口,是Motorola首先在其MC68HCXX系列处理器上定义的。SPI接口主要应用在EEPROM,FLASH,实时时钟,AD转换器,还有数字信号处理器和数字信号解码器之间。
@@ -906,4 +908,25 @@
 
 
 7.写一个完整的回调函数
+          如果参数是一个函数指针，调用者可以传递一个函数的地址给实现者，让实现者去调用它，这称为回调函数（Callback Function）
+          int (*func)(void);函数指针，指向的函数为空参数，返回整型；
+          void function(int(*func)(void),int tmp);包含函数指针.是回调函数
+
+          例子:
+            void caller(void(*ptr)())
+            {
+                ptr(); /* 调用ptr指向的函数 */ 
+            }
+
+            void func()
+            {
+                printk("hello_world\n");
+            }
+
+            int main()
+            {
+                void (*p) (); //p是指向某函数的指针
+                p = func; 
+                caller(p); /* 传递函数地址到调用者 */
+            }
 
