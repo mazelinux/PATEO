@@ -777,3 +777,39 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
 /HAL – 包含摄像头核心 HAL 源代码
 /Stack – 包含 mm-camera 及 mm-jpeg 接口源代码
 /Util – 包含 HAL 所用的实用程序源代码
+
+
+    1.Open camera
+    App:
+              mCameraManager.openCamera(currentCameraId, stateCallback, backgroundHandler);
+    
+    Framework:
+              /frameworks/base/core/java/android/hardware/camera2/CameraManager.java    openCamera
+                                                                                        -->openCameraForUid
+                                                                                        ---->openCameraDeviceUserAsync    首先实例化一个CameraDeviceImpl,构造时传入了CameraDevice.StateCallback以及Handler
+                                                                                                                          获取CameraDeviceCallback实例，这是提供给远端连接到CameraDeviceImpl的接口
+                                                                                                                          HAL3 中走的是这一部分逻辑，主要是从CameraManagerGlobal中获取CameraService的本地接口，通过它远端调用(采用Binder机制)connectDevice方法连接到相机设备。注意返回的cameraUser实际上指向的是远端CameraDeviceClient的本地接口.将CameraDeviceClient设置到CameraDeviceImpl中进行管理
+
+    Runtime:
+              /frameworks/av/services/camera/libcameraservice/CameraService.cpp       connectDevice        调用的 connectHelper 方法才真正实现了连接逻辑（HAL1 时最终也调用到这个方法）。需要注意的是，设定的模板类型是 ICameraDeviceCallbacks 以及 CameraDeviceClient;client指向的类型是CameraDeviceClient，其实例则是最终的返回结果
+                                                                                    -->connectHelper     调用 makeClient 生成 CameraDeviceClient 实例;初始化 CLIENT 实例。注意此处的模板类型 CLIENT 即是 CameraDeviceClient，传入的参数 mCameraProviderManager 则是与 HAL service有关 
+                                                                                    ---->makeClient      主要是根据 API 版本以及 HAL 版本来选择生成具体的 Client 实例。对于 HAL3 且 CameraAPI2 的情况;实例化了 CameraDeviceClient 类作为 Client（注意此处构造传入了 ICameraDeviceCallbacks，这是连接到 CameraDeviceImpl 的远端回调）;最终，这一 Client 就沿着前面分析下来的路径返回到 CameraDeviceImpl 实例中，被保存到 mRemoteDevice。至此，打开相机流程中，从 App 到 CameraService 的调用逻辑基本上就算走完了。
+              /frameworks/av/services/camera/libcameraservice/api2/CameraDeviceClient.cpp       CameraDeviceClient      CameraService 在创建 CameraDeviceClient 之后，会调用它的初始化函数;
+              /frameworks/av/services/camera/libcameraservice/common/Camera2ClientBase.cpp      Camera2ClientBase
+              /frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp         Camera3Device
+              --------------------------------------------------------------------------------------------------------
+              /frameworks/av/services/camera/libcameraservice/common/CameraProviderManager.cpp  CameraProviderManager
+
+              在 HAL3 中，Camera HAL 的接口转化层（以及流解析层）由 QCamera3HardwareInterface 担当，而接口层与实现层与 HAL1 中基本没什么差别，都是在 mm_camera_interface.c 与 mm_camera.c 中。
+    Hal:
+              /hardware/interfaces/camera/device/3.2/default/CameraDevice.cpp                   CameraDevice
+                                                                                                -->CameraDevice::open
+                                                                                                -->CameraDevice::createSession
+
+              /hardware/interfaces/camera/common/1.0/default/CameraModule.cpp                   CameraModule
+                                                                                                -->CameraModule::open
+                                                                                                ---->mModule->common.methods->open
+
+              /hardware/qcom/camera/qcamera2/QCamera2Factory.cpp                                QCamera2Factory
+                                                                                                -->cameraDeviceOpen     首先创建了QCamera3HardwareInterface的实例;调用实例的openCamera方法
+                                                                                                ---->hw->openCamera(hw_device)
