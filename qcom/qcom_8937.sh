@@ -813,3 +813,17 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
               /hardware/qcom/camera/qcamera2/QCamera2Factory.cpp                                QCamera2Factory
                                                                                                 -->cameraDeviceOpen     首先创建了QCamera3HardwareInterface的实例;调用实例的openCamera方法
                                                                                                 ---->hw->openCamera(hw_device)
+
+              /hardware/qcom/camera/qcamera2/hal3/QCamera3HWI.cpp                               QCamera3HardwareInterface
+                                                                                                -->QCamera3HardwareInterface::openCamera
+                                                                                                ---->rc = openCamera();
+                                                                                                ------>QCamera3HardwareInterface::openCamera()
+                                                                                                -------->rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
+
+              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera_interface.c    camera_open
+                                                                                                    -->rc = mm_camera_open(cam_obj);
+
+              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera.c          mm_camera_open(mm_camera_obj_t *my_obj)     mm_camera_open 主要工作是填充 my_obj，并且启动、初始化一些线程相关的东西;
+                                                                                                -->my_obj->ctrl_fd = open(dev_name, O_RDWR | O_NONBLOCK);       读取设备文件的文件描述符，存到 my_obj->ctrl_fd 中。注意设备文件的路径是 /dev/video0（video 后面的数字表示打开设备的 id），并且在某些打开失败的情况下，会定时重新尝试打开直至成功
+
+
