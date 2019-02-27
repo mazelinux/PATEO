@@ -778,26 +778,33 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
 /Stack – 包含 mm-camera 及 mm-jpeg 接口源代码
 /Util – 包含 HAL 所用的实用程序源代码
 
+从摄像头 HAL 层获取日志信息:
+    打开hardware/qcom/camera/QCamera2/stack/mm-camera-interface/inc 文件夹. 在mm_camera_dbg.h文件中,将LOG_DEBUG设为1,启用日志。#define LOG_DEBUG 1
 
+
+              ---------------------------------------------------------------------------------[android Open Camera整体流程]
     1.Open camera
     App:
               mCameraManager.openCamera(currentCameraId, stateCallback, backgroundHandler);
     
     Framework:
-              /frameworks/base/core/java/android/hardware/camera2/CameraManager.java    openCamera
-                                                                                        -->openCameraForUid
-                                                                                        ---->openCameraDeviceUserAsync    首先实例化一个CameraDeviceImpl,构造时传入了CameraDevice.StateCallback以及Handler
-                                                                                                                          获取CameraDeviceCallback实例，这是提供给远端连接到CameraDeviceImpl的接口
+              /frameworks/base/core/java/android/hardware/camera2/CameraManager.java            openCamera
+                                                                                                -->openCameraForUid
+                                                                                                ---->openCameraDeviceUserAsync    首先实例化一个CameraDeviceImpl,构造时传入了CameraDevice.StateCallback以及Handler
+                                                                                                ------>ICameraDeviceCallbacks callbacks = deviceImpl.getCallbacks();    获取CameraDeviceCallback实例，这是提供给远端连接到CameraDeviceImpl的接口
                                                                                                                           HAL3 中走的是这一部分逻辑，主要是从CameraManagerGlobal中获取CameraService的本地接口，通过它远端调用(采用Binder机制)connectDevice方法连接到相机设备。注意返回的cameraUser实际上指向的是远端CameraDeviceClient的本地接口.将CameraDeviceClient设置到CameraDeviceImpl中进行管理
 
+              /frameworks/base/core/java/android/hardware/camera2/Impl/CameraDeviceImpl.java
+
     Runtime:
-              /frameworks/av/services/camera/libcameraservice/CameraService.cpp       connectDevice        调用的 connectHelper 方法才真正实现了连接逻辑（HAL1 时最终也调用到这个方法）。需要注意的是，设定的模板类型是 ICameraDeviceCallbacks 以及 CameraDeviceClient;client指向的类型是CameraDeviceClient，其实例则是最终的返回结果
-                                                                                    -->connectHelper     调用 makeClient 生成 CameraDeviceClient 实例;初始化 CLIENT 实例。注意此处的模板类型 CLIENT 即是 CameraDeviceClient，传入的参数 mCameraProviderManager 则是与 HAL service有关 
-                                                                                    ---->makeClient      主要是根据 API 版本以及 HAL 版本来选择生成具体的 Client 实例。对于 HAL3 且 CameraAPI2 的情况;实例化了 CameraDeviceClient 类作为 Client（注意此处构造传入了 ICameraDeviceCallbacks，这是连接到 CameraDeviceImpl 的远端回调）;最终，这一 Client 就沿着前面分析下来的路径返回到 CameraDeviceImpl 实例中，被保存到 mRemoteDevice。至此，打开相机流程中，从 App 到 CameraService 的调用逻辑基本上就算走完了。
+              /frameworks/av/services/camera/libcameraservice/CameraService.cpp                 connectDevice        调用的connectHelper方法才真正实现了连接逻辑（HAL1 时最终也调用到这个方法）。需要注意的是，设定的模板类型是ICameraDeviceCallbacks以及CameraDeviceClient;client指向的类型是CameraDeviceClient，其实例则是最终的返回结果
+                                                                                                -->connectHelper     调用makeClient生成CameraDeviceClient实例;初始化CLIENT实例。注意此处的模板类型CLIENT即是CameraDeviceClient，传入的参数mCameraProviderManager则是与 HAL service有关 
+                                                                                                ---->makeClient      主要是根据 API 版本以及 HAL 版本来选择生成具体的 Client 实例。对于 HAL3 且 CameraAPI2 的情况;实例化了 CameraDeviceClient 类作为 Client（注意此处构造传入了 ICameraDeviceCallbacks，这是连接到 CameraDeviceImpl 的远端回调）;最终，这一 Client 就沿着前面分析下来的路径返回到 CameraDeviceImpl 实例中，被保存到 mRemoteDevice。至此，打开相机流程中，从 App 到 CameraService 的调用逻辑基本上就算走完了。
               /frameworks/av/services/camera/libcameraservice/api2/CameraDeviceClient.cpp       CameraDeviceClient      CameraService 在创建 CameraDeviceClient 之后，会调用它的初始化函数;
               /frameworks/av/services/camera/libcameraservice/common/Camera2ClientBase.cpp      Camera2ClientBase
               /frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp         Camera3Device
-              --------------------------------------------------------------------------------------------------------
+
+              ---------------------------------------------------------------------------------[下面就是hal层的接口了]
               /frameworks/av/services/camera/libcameraservice/common/CameraProviderManager.cpp  CameraProviderManager
 
               在 HAL3 中，Camera HAL 的接口转化层（以及流解析层）由 QCamera3HardwareInterface 担当，而接口层与实现层与 HAL1 中基本没什么差别，都是在 mm_camera_interface.c 与 mm_camera.c 中。
@@ -808,22 +815,26 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
 
               /hardware/interfaces/camera/common/1.0/default/CameraModule.cpp                   CameraModule
                                                                                                 -->CameraModule::open
-                                                                                                ---->mModule->common.methods->open
+                                                                                                ---->mModule->common.methods->open    struct hw_module_methods_t QCamera2Factory::mModuleMethods = {.open = QCamera2Factory::camera_device_open,};
+
+              ---------------------------------------------------------------------------------[下面就是不同平台不同实现,我们是qcom]
 
               /hardware/qcom/camera/qcamera2/QCamera2Factory.cpp                                QCamera2Factory
-                                                                                                -->cameraDeviceOpen     首先创建了QCamera3HardwareInterface的实例;调用实例的openCamera方法
-                                                                                                ---->hw->openCamera(hw_device)
+                                                                                                -->QCamera2Factory::camera_device_open    static function to open a camera device by its ID
+                                                                                                ---->gQCamera2Factory->cameraDeviceOpen     首先创建了QCamera3HardwareInterface的实例hw;调用实例的openCamera方法
+                                                                                                ---->QCamera2Factory::cameraDeviceOpen
+                                                                                                ------>hw->openCamera(hw_device)
 
               /hardware/qcom/camera/qcamera2/hal3/QCamera3HWI.cpp                               QCamera3HardwareInterface
-                                                                                                -->QCamera3HardwareInterface::openCamera
+                                                                                                -->QCamera3HardwareInterface::openCamera(hw_device)
                                                                                                 ---->rc = openCamera();
                                                                                                 ------>QCamera3HardwareInterface::openCamera()
                                                                                                 -------->rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
 
-              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera_interface.c    camera_open
+              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera_interface.c    camera_open     open a camera by camera index
                                                                                                     -->rc = mm_camera_open(cam_obj);
 
-              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera.c          mm_camera_open(mm_camera_obj_t *my_obj)     mm_camera_open 主要工作是填充 my_obj，并且启动、初始化一些线程相关的东西;
-                                                                                                -->my_obj->ctrl_fd = open(dev_name, O_RDWR | O_NONBLOCK);       读取设备文件的文件描述符，存到 my_obj->ctrl_fd 中。注意设备文件的路径是 /dev/video0（video 后面的数字表示打开设备的 id），并且在某些打开失败的情况下，会定时重新尝试打开直至成功
+              /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera.c          mm_camera_open(mm_camera_obj_t *my_obj)     mm_camera_open主要工作是填充my_obj，并且启动、初始化一些线程相关的东西;
+                                                                                                -->my_obj->ctrl_fd = open(dev_name, O_RDWR | O_NONBLOCK);       读取设备文件的文件描述符,存到my_obj->ctrl_fd中。注意设备文件的路径是/dev/video1(video后面的数字表示打开设备的id)，并且在某些打开失败的情况下，会定时重新尝试打开直至成功
 
 
