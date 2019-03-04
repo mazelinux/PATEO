@@ -739,6 +739,7 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
     typedef enum _read_fd_type {
         RD_FD_HAL, ----------------server_process_hal_event(&event)---返回真，说明消息传递给 MCT，这时不需要发送CMD ACK给kernel，因为MCT处理结束后会发出通知；反之没有，此时需要立即发送CMD ACK到kernel，以免HAL发送此消息的线程阻塞住;用来处理kernel的node update
             case MSM_CAMERA_NEW_SESSION:
+                server_process_bind_hal_ds()    addr.sun_path = /data/vendor/camera/cam_socket%d     hal层在mm_camera_socket_create里面也会connect同一个socket
                 mct_controller_new();
             ...
             case MSM_CAMERA_DEL_SESSION:
@@ -781,13 +782,14 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
 从摄像头 HAL 层获取日志信息:
     打开hardware/qcom/camera/QCamera2/stack/mm-camera-interface/inc 文件夹. 在mm_camera_dbg.h文件中,将LOG_DEBUG设为1,启用日志。#define LOG_DEBUG 1
 
+Android采用类似linux的driver架构，实现hal层的一些设备管理。camera_module_t是hardware模型，被framework层使用:/hardware/qcom/camera/QCamera2/QCamera2Hal.cpp
 
-              ---------------------------------------------------------------------------------[android Open Camera整体流程]
+              '---------------------------------------------------------------------------------[android Open Camera整体流程]'
     1.Open camera
-    App:
+    "App":
               mCameraManager.openCamera(currentCameraId, stateCallback, backgroundHandler);
     
-    Framework:
+    "Framework":
               /frameworks/base/core/java/android/hardware/camera2/CameraManager.java            openCamera
                                                                                                 -->openCameraForUid
                                                                                                 ---->openCameraDeviceUserAsync    首先实例化一个CameraDeviceImpl,构造时传入了CameraDevice.StateCallback以及Handler
@@ -796,7 +798,7 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
 
               /frameworks/base/core/java/android/hardware/camera2/Impl/CameraDeviceImpl.java
 
-    Runtime:
+    "Runtime":
               /frameworks/av/services/camera/libcameraservice/CameraService.cpp                 connectDevice        调用的connectHelper方法才真正实现了连接逻辑（HAL1 时最终也调用到这个方法）。需要注意的是，设定的模板类型是ICameraDeviceCallbacks以及CameraDeviceClient;client指向的类型是CameraDeviceClient，其实例则是最终的返回结果
                                                                                                 -->connectHelper     调用makeClient生成CameraDeviceClient实例;初始化CLIENT实例。注意此处的模板类型CLIENT即是CameraDeviceClient，传入的参数mCameraProviderManager则是与 HAL service有关 
                                                                                                 ---->makeClient      主要是根据 API 版本以及 HAL 版本来选择生成具体的 Client 实例。对于 HAL3 且 CameraAPI2 的情况;实例化了 CameraDeviceClient 类作为 Client（注意此处构造传入了 ICameraDeviceCallbacks，这是连接到 CameraDeviceImpl 的远端回调）;最终，这一 Client 就沿着前面分析下来的路径返回到 CameraDeviceImpl 实例中，被保存到 mRemoteDevice。至此，打开相机流程中，从 App 到 CameraService 的调用逻辑基本上就算走完了。
@@ -804,11 +806,11 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
               /frameworks/av/services/camera/libcameraservice/common/Camera2ClientBase.cpp      Camera2ClientBase
               /frameworks/av/services/camera/libcameraservice/device3/Camera3Device.cpp         Camera3Device
 
-              ---------------------------------------------------------------------------------[下面就是hal层的接口了]
+              '---------------------------------------------------------------------------------[下面就是Android hal层的接口了]'
               /frameworks/av/services/camera/libcameraservice/common/CameraProviderManager.cpp  CameraProviderManager
 
               在 HAL3 中，Camera HAL 的接口转化层（以及流解析层）由 QCamera3HardwareInterface 担当，而接口层与实现层与 HAL1 中基本没什么差别，都是在 mm_camera_interface.c 与 mm_camera.c 中。
-    Hal:
+    "Hal":
               /hardware/interfaces/camera/device/3.2/default/CameraDevice.cpp                   CameraDevice
                                                                                                 -->CameraDevice::open
                                                                                                 -->CameraDevice::createSession
@@ -817,24 +819,53 @@ daemon进程作为单一进程，在代码中就是mm-qcamera-daemon，其main �
                                                                                                 -->CameraModule::open
                                                                                                 ---->mModule->common.methods->open    struct hw_module_methods_t QCamera2Factory::mModuleMethods = {.open = QCamera2Factory::camera_device_open,};
 
-              ---------------------------------------------------------------------------------[下面就是不同平台不同实现,我们是qcom]
+              '---------------------------------------------------------------------------------[下面就是不同平台不同实现,我们是qcom]'
 
               /hardware/qcom/camera/qcamera2/QCamera2Factory.cpp                                QCamera2Factory
-                                                                                                -->QCamera2Factory::camera_device_open    static function to open a camera device by its ID
+                                                                                                -->QCamera2Factory::camera_device_open      static function to open a camera device by its ID
                                                                                                 ---->gQCamera2Factory->cameraDeviceOpen     首先创建了QCamera3HardwareInterface的实例hw;调用实例的openCamera方法
                                                                                                 ---->QCamera2Factory::cameraDeviceOpen
                                                                                                 ------>hw->openCamera(hw_device)
 
-              /hardware/qcom/camera/qcamera2/hal3/QCamera3HWI.cpp                               QCamera3HardwareInterface
+              /hardware/qcom/camera/qcamera2/hal3/QCamera3HWI.cpp                               QCamera3HardwareInterface   hardware interface是android上层开启camera要调用的ops接口
                                                                                                 -->QCamera3HardwareInterface::openCamera(hw_device)
                                                                                                 ---->rc = openCamera();
                                                                                                 ------>QCamera3HardwareInterface::openCamera()
                                                                                                 -------->rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
 
               /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera_interface.c    camera_open     open a camera by camera index
+                                                                                                    -->cam_obj->vtbl.ops = &mm_camera_ops;      每个cam_obj是在open下调用生成的对象，每次调用一个camera，产生一个object,这个obj的ops是mm_camera_ops，提供给上层使用的接口
                                                                                                     -->rc = mm_camera_open(cam_obj);
 
               /hardware/qcom/camera/qcamera2/stack/mm-camera-interface/src/mm_camera.c          mm_camera_open(mm_camera_obj_t *my_obj)     mm_camera_open主要工作是填充my_obj，并且启动、初始化一些线程相关的东西;
                                                                                                 -->my_obj->ctrl_fd = open(dev_name, O_RDWR | O_NONBLOCK);       读取设备文件的文件描述符,存到my_obj->ctrl_fd中。注意设备文件的路径是/dev/video1(video后面的数字表示打开设备的id)，并且在某些打开失败的情况下，会定时重新尝试打开直至成功
 
 
+=========================================================================
+                                QCOM CAMERA HAL PREVIEW
+=========================================================================
+https://blog.csdn.net/gzzaigcnforever/article/details/48997463
+https://blog.csdn.net/gzzaigcnforever/article/details/49070703
+
+
+                /framework/av/services/camera/libcameraservice/api1/Camera2Client.cpp           initialize()
+                                                                                                -->mStreamingProcessor = new StreamingProcessor(this);//preview和recorder
+                                                                                                ...//创建并运行各种camera功能的线程;StreamingProcessor并启动一个他所属的thread，该模块主要负责处理previews与record两种视频流的处理，用于从hal层获取原始的视频数据
+
+                " 预览Preview下的控制流"                                                        Camera2Client::startPreview()
+                                                                                                -->Camera2Client::startPreviewL(Parameters &params, bool restart)
+                                                                                                ---->mStreamingProcessor->updatePreviewStream(params);//创建camera3device stream， Camera3OutputStream;该函数首先是查看当前StreamingProcessor模块下是否存在Stream，没有的话，则交由Camera3Device创建一个stream。显然，一个StreamingProcessor只能拥有一个PreviewStream，而一个Camera3Device显然控制着所有的Stream。
+                                                                                                ------>Camera3Device::createStream(sp<ANativeWindow> consumer, uint32_t width, uint32_t height, int format, int *id)        注意：在Camera2Client中，Stream大行其道，5大模块的数据交互均以stream作为基础。
+                                                                                                ---->Camera2Client::updateProcessorStream(sp<ProcessorT> processor, camera2::Parameters params)
+                                                                                                ---->CallbackProcessor::updateStream(const Parameters &params)
+
+
+
+
+
+
+
+camera2client
+camera2client::startpreview
+camera2client::startpreviwel
+mStreamingProcessor->updatePreviewStream()

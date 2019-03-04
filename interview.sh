@@ -591,6 +591,26 @@
     　　UNIX Domain Socket是全双工的，API接口语义丰富，相比其它IPC机制有明显的优越性，目前已成为使用最广泛的IPC机制，比如X Window服务器和GUI程序之间就是通过UNIX Domain Socket通讯的。
         服务端： socket -> bind -> listen -> accet -> recv/send -> close
         客户端： socket -> connect -> recv/send -> close
+        进程间通信的一种方式是使用UNIX套接字，人们在使用这种方式时往往用的不是网络套接字，而是一种称为本地套接字的方式。这样做可以避免为黑客留下后门。
+
+        '创建'
+        使用套接字函数socket创建，不过传递的参数与网络套接字不同。域参数应该是PF_LOCAL或者PF_UNIX，而不能用PF_INET之类。本地套接字的通讯类型应该是SOCK_STREAM或SOCK_DGRAM，协议为默认协议。例如：
+        int sockfd;
+        sockfd = socket(PF_LOCAL, SOCK_STREAM, 0);
+
+        '绑定'
+        创建了套接字后，还必须进行绑定才能使用。不同于网络套接字的绑定，本地套接字的绑定的是struct sockaddr_un结构。struct sockaddr_un结构有两个参数：sun_family、sun_path。sun_family只能是AF_LOCAL或AF_UNIX，而sun_path是本地文件的路径。通常将文件放在/tmp目录下。例如：
+        struct sockaddr_un sun;
+        sun.sun_family = AF_LOCAL;
+        strcpy(sun.sun_path, filepath);
+        bind(sockfd, (struct sockaddr*)&sun, sizeof(sun));
+
+        '监听'
+        本地套接字的监听、接受连接操作与网络套接字类似。
+
+        '连接'
+        连接到一个正在监听的套接字之前，同样需要填充struct sockaddr_un结构，然后调用connect函数。
+        连接建立成功后，我们就可以像使用网络套接字一样进行发送和接受操作了。甚至还可以将连接设置为非阻塞模式
 
         例子    
         服务器端
