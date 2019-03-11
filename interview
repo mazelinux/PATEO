@@ -949,3 +949,80 @@
                 caller(p); /* 传递函数地址到调用者 */
             }
 
+==================================================================================
+    20190308 htc
+
+1.tp的工作流程  input_device input_handle input_handler
+
+input_dev       具体的驱动设备      input_register_device
+input_handler   具体的驱动处理      input_register_handler
+
+注册:
+    input_allocate_device 
+    ...
+    申请并填充input_dev结构体;
+    包括最终的/dev/input节点指明;
+    通过__set_bit去设置input设备支持的类型.[上层getevent会在初始化的时候走ioctl来判断这些]  比如EV_ABS,EV_KEY,EV_MSC...
+    设置x,y大小;
+    
+    input_register_device
+        dev_set_name设置input_dev中的device的名字，名字以input0、input1、input2等的形式出现在sysfs文件系统中
+        调用__set_bit()函数设置input_dev所支持的事件类型。事件类型由input_dev的evbit成员来表示，在这里将其EV_SYN置位，表示设备支持所有的事件
+        使用device_add()函数将input_dev包含的device结构注册到Linux设备模型中，并可以在sysfs文件系统中表现出来
+        调用list_add_tail()函数将input_dev加入input_dev_list链表中，input_dev_list链表中包含了系统中所有的input_dev设备
+
+=============================================================
+    1.注册输入子系统,进入input_init():
+        1)创建主设备号为13的"input"字符设备
+            err = register_chrdev(INPUT_MAJOR, "input", &input_fops);
+
+    2.open打开驱动,进入input_open_file():
+        1)更新设备的file_oprations
+            file->f_op=fops_get(handler->fops);
+
+        2)执行file_oprations->open函数
+            err = new_fops->open(inode, file);
+
+    3.注册input_handler,进入input_register_handler():
+        1)添加到input_table[]处理数组中
+            input_table[handler->minor >> 5] = handler;
+
+        2）添加到input_handler_list链表中
+            list_add_tail(&handler->node, &input_handler_list);
+
+        3)判断input_dev的id,是否有支持这个驱动的设备
+            list_for_each_entry(dev, &input_dev_list, node)   //遍历查找input_dev_list链表里所有input_dev
+            input_attach_handler(dev, handler);             //判断两者id,若两者支持便进行连接。
+
+    4.注册input_dev，进入input_register_device():
+        1)放在input_dev_list链表中
+            list_add_tail(&dev->node, &input_dev_list);
+
+        2)判断input_handler的id，是否有支持这个设备的驱动
+            list_for_each_entry(handler, &input_handler_list, node)  //遍历查找input_handler_list链表里所有input_handler
+            input_attach_handler(dev, handler);                      //判断两者id,若两者支持便进行连接。
+
+    5.判断input_handler和input_dev的id,进入input_attach_handler():
+        1）匹配两者id,
+            input_match_device(handler->id_table, dev);        //匹配input_handler和dev的id,不成功退出函数
+
+        2)匹配成功调用input_handler ->connect
+            handler->connect(handler, dev, id);              //建立连接
+
+    6.建立input_handler和input_dev的连接，进入input_handler->connect():
+        1)创建全局结构体,通过input_handle结构体连接双方
+            evdev = kzalloc(sizeof(struct evdev), GFP_KERNEL);    //创建两者连接的input_handle全局结构体
+            list_add_tail(&handle->d_node, &handle->dev->h_list); //连接input_dev->h_list
+            list_add_tail(&handle->h_node, &handler->h_list);    // 连接input_handle->h_list
+
+    7.有事件发生时,比如按键中断,在中断函数中需要进入input_event()上报事件:
+        1)找到驱动处理结构体，然后执行input_handler->event()
+            list_for_each_entry(handle, &dev->h_list, d_node)     // 通过input_dev ->h_list链表找到input_handle驱动处理结构体
+            if (handle->open)  //如果input_handle之前open 过,那么这个就是我们的驱动处理结构体(有可能一个驱动设备在不同情况下有不同的驱动处理方式)
+            handle->handler->event(handle, type, code, value); //调用evdev_event()的.event事件函数 
+=============================================================
+
+
+2.i2c的总线架构 发送消息的命令最终会执行哪些操作
+3.中断的注册流程.中断的执行流程
+
