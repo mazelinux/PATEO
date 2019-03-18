@@ -957,7 +957,7 @@
 1.tp的工作流程  input_device input_handle input_handler
 
 input_dev       具体的驱动设备      input_register_device
-input_handler   具体的驱动处理      input_register_handler
+input_handler   具体的驱动处理      input_register_handler    //在input子系统中事件处理层有很多evdev,joydev,evbug,mousedev.对于触摸屏来说,事件处理器是evdev.
 
 注册:
     input_allocate_device 
@@ -971,7 +971,16 @@ input_handler   具体的驱动处理      input_register_handler
         dev_set_name设置input_dev中的device的名字，名字以input0、input1、input2等的形式出现在sysfs文件系统中
         调用__set_bit()函数设置input_dev所支持的事件类型。事件类型由input_dev的evbit成员来表示，在这里将其EV_SYN置位，表示设备支持所有的事件
         使用device_add()函数将input_dev包含的device结构注册到Linux设备模型中，并可以在sysfs文件系统中表现出来
+
         调用list_add_tail()函数将input_dev加入input_dev_list链表中，input_dev_list链表中包含了系统中所有的input_dev设备
+        list_for_each_entry(handler, &input_handler_list, node) //遍历handler列表
+            input_attach_handler(dev, handler);                 //对hanler与dev进行匹配;对于触摸屏来说,handler是evdev.
+            input_match_device                  //匹配handler->id_table指向的列表中的设备和dev->id数据
+            handler->connect(handler, dev, id); //连接设备和处理函数
+
+            匹配成功以后,赋值handler里面的结构体,注册handle,注册dev节点
+            上层的getevent函数对节点的操作全部都是通过$handler.c文件的回调向下执行的.
+            $handler.c可能是evdev.c;joydev.c;mousedev.c
 
 =============================================================
     1.注册输入子系统,进入input_init():
@@ -1022,6 +1031,9 @@ input_handler   具体的驱动处理      input_register_handler
             list_for_each_entry(handle, &dev->h_list, d_node)     // 通过input_dev ->h_list链表找到input_handle驱动处理结构体
             if (handle->open)  //如果input_handle之前open 过,那么这个就是我们的驱动处理结构体(有可能一个驱动设备在不同情况下有不同的驱动处理方式)
             handle->handler->event(handle, type, code, value); //调用evdev_event()的.event事件函数 
+        
+            input_report_xxx()  ->  input_event()   ->  input_handle_event()    ->  input_pass_values() ->  input_to_handler()  -> handler->filter() & handler->events()
+            如果是evdev.c events = evdev_events()   //input_value结构体转换成input_event结构体,并且增加时间撮   ->  evdev_pass_values() ->  __pass_event()  //client->buffer[client->head++] = *event; event就是input_event结构体,上报的数据放在buffer里面.上层调用read函数就是 *event = client->buffer[client->tail++];
 
 =============================================================
 2.i2c的总线架构 发送消息的命令最终会执行哪些操作
