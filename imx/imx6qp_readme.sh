@@ -377,21 +377,21 @@ uboot_printenv/cmdline传递                      ====================> 016
      Dsipclk(Dsi pixel clock) = dsiclk/bpp (byte)
 
     1、DSI vdo mode下的数据速率data_rate的大致计算公式为：
-    Data rate= (Height+VSA+VBP+VFP)*(Width+HSA+HBP+HFP)* total_bit_per_pixel*frame_per_second/total_lane_num
-                                                         888:24 666:18       一秒钟多少帧     几路数据
+    [Bitclk]Data rate= (Height+VSA+VBP+VFP)*(Width+HSA+HBP+HFP)* total_bit_per_pixel*frame_per_second/total_lane_num
+                                                                 888:24 666:18       一秒钟多少帧     几路数据
      
 
     2、DSI cmd mode下的数据速率data_rate的大致计算公式为：
-    Data rate= width*height*1.2* total_bit_per_pixel*frame_per_second/total_lane_num
+    [Bitclk]Data rate= width*height*1.2* total_bit_per_pixel*frame_per_second/total_lane_num
 
     参数注释：
-    data_rate ： 表示的是数据速率
-    width，height  ：屏幕分辨率
-    VSA VBP VFP ：DSI vdo mode的vertical porch配置参数
-    HSA HBP HFP ：DSI vdo mode的horizontal porch配置参数
-    total_bit_per_pixel ：表示的是一个pixel需要用几个bit来表示，比如RGB565的话就是16个bit
-    frame_per_second ：就是我们通常看到的fps，叫做帧率，表示每秒发送多少个帧，一般是60帧每秒
-    total_lane_num ：表示的是data lane的对数。
+    [Bitclk]data_rate ：    表示的是数据速率
+    width，height  ：       屏幕分辨率
+    VSA VBP VFP ：          DSI vdo mode的vertical porch配置参数
+    HSA HBP HFP ：          DSI vdo mode的horizontal porch配置参数
+    total_bit_per_pixel ：  表示的是一个pixel需要用几个bit来表示，比如RGB565的话就是16个bit
+    frame_per_second ：     就是我们通常看到的fps，叫做帧率，表示每秒发送多少个帧，一般是60帧每秒
+    total_lane_num ：       表示的是data lane的对数。
 
 
     Min DSI CLK = (Total number of Horizontal pixels presented on DSI interface*DSI bits per pixel)/(Horizontal Line Time*2*Number of DSI lanes)
@@ -410,8 +410,8 @@ uboot_printenv/cmdline传递                      ====================> 016
     如:dsi83,dsi84
 
     83本身来说是一路四数据lane的mipi转一路lvds,
-    lvds clock = [htotal]*[vtotal]*60
-    mipi clock = data rate
+    lvds clock = [htotal]*[vtotal]*60 = [pclk]
+    mipi clock = dsiclk
 
     84本身来说是一路四数据lane的mipi转两路lvds,相对的.htotal要除以
     mipi 这边如果填的是1920 + 10 +10 +10 
